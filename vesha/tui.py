@@ -70,6 +70,24 @@ HELP = [
 ]
 
 
+def xterm256(rgb):
+    """The nearest of the terminal's 256 standard colours, for terminals that
+    can't redefine colours (tmux, most of the time)."""
+    steps = (0, 95, 135, 175, 215, 255)
+
+    def near(v):
+        return min(range(6), key=lambda i: abs(steps[i] - v))
+    r, g, b = (near(v) for v in rgb)
+    cube = 16 + 36 * r + 6 * g + b
+    cube_rgb = (steps[r], steps[g], steps[b])
+    gray = max(0, min(23, round((sum(rgb) / 3 - 8) / 10)))
+    gray_v = 8 + 10 * gray
+
+    def dist(c):
+        return sum((x - y) ** 2 for x, y in zip(c, rgb, strict=True))
+    return cube if dist(cube_rgb) <= dist((gray_v,) * 3) else 232 + gray
+
+
 class App:
     def __init__(self, scr):
         self.scr = scr
@@ -142,7 +160,7 @@ class App:
                     curses.init_color(num, *(round(v * 1000 / 255) for v in rgb))
                 except curses.error:
                     custom = False
-            self.cp[name] = num if custom else FALLBACK[name]
+            self.cp[name] = num if custom else xterm256(rgb) if curses.COLORS >= 256 else FALLBACK[name]
         pairs = {}
         n = 1
         for fg in PALETTE:

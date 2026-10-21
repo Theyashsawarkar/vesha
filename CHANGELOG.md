@@ -2,6 +2,13 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.3.2 -- 2026-10-21
+
+- Fixed: inside tmux (the `prefix C` popup), where programs can't redefine
+  colours, the switcher fell back to the 8 basic terminal colours: red
+  titles, yellow chips. It now uses the nearest of the 256 standard
+  colours, so it looks like the theme there too.
+
 ## v0.3.1 -- 2026-10-21
 
 - **Follows your theme**: with [varna](https://github.com/Theyashsawarkar/varna)
