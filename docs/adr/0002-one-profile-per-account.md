@@ -1,6 +1,6 @@
 # 2. One Claude Code profile per account
 
-**Status:** Accepted  
+**Status:** Accepted (where profiles live: amended by [ADR 8](0008-data-in-the-state-folder.md))  
 **Date:** 2026-10-21
 
 ## Context

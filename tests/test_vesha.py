@@ -107,5 +107,38 @@ class Misc(unittest.TestCase):
         self.assertTrue(core.resets_in(iso)[0].startswith("3h"))
 
 
+class Migrate(unittest.TestCase):
+    def paths(self, root):
+        new = os.path.join(root, "state", "vesha")
+        return mock.patch.multiple(core, LEGACY=os.path.join(root, "share", "vesha"), DATA=new,
+                                   STATE=os.path.join(new, "accounts.json"), PROFILES=os.path.join(new, "profiles"))
+
+    def legacy(self, root):
+        old = os.path.join(root, "share", "vesha")
+        os.makedirs(os.path.join(old, "profiles", "work"))
+        with open(os.path.join(old, "accounts.json"), "w") as f:
+            f.write('{"accounts": {"work": {}}, "default": "work", "folders": {}}')
+        return old
+
+    def test_moves_accounts_and_profiles_out_of_the_install_folder(self):
+        root = tempfile.mkdtemp()
+        old = self.legacy(root)
+        with self.paths(root), mock.patch.object(core, "running_profiles", lambda: {}):
+            self.assertEqual(core.load()["default"], "work")
+            self.assertTrue(os.path.isdir(os.path.join(core.PROFILES, "work")))
+        self.assertFalse(os.path.exists(old))
+
+    def test_never_from_a_checkout_or_under_a_running_session(self):
+        root = tempfile.mkdtemp()
+        old = self.legacy(root)
+        busy = {os.path.join(old, "profiles", "work"): 1}
+        with self.paths(root), mock.patch.object(core, "running_profiles", lambda: busy):
+            self.assertEqual(core.load()["accounts"], {})
+        os.makedirs(os.path.join(old, ".git"))
+        with self.paths(root), mock.patch.object(core, "running_profiles", lambda: {}):
+            self.assertEqual(core.load()["accounts"], {})
+        self.assertTrue(os.path.exists(os.path.join(old, "accounts.json")))
+
+
 if __name__ == "__main__":
     unittest.main()

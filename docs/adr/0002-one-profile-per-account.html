@@ -20,7 +20,7 @@
 <nav><a href="../index.html" class="">Overview</a><a href="../changelog.html" class="">Changelog</a><a href="../adr/index.html" class="on hide">Decisions</a><a class="gh" href="https://github.com/Theyashsawarkar/vesha">GitHub ↗</a></nav></div></header>
 
 <div class="wrap"><aside class="toc"></aside><article>
-<p class="n"><span class="status accepted">Accepted</span> <span style="color:var(--ov1);font:13px var(--mono)">ADR 0002 · 2026-10-21</span></p><h2 id="2-one-claude-code-profile-per-account"><a class="anchor" href="#2-one-claude-code-profile-per-account">#</a>2. One Claude Code profile per account</h2>
+<p class="n"><span class="status accepted">Accepted (where profiles live: amended by [ADR 8](0008-data-in-the-state-folder.md))</span> <span style="color:var(--ov1);font:13px var(--mono)">ADR 0002 · 2026-10-21</span></p><h2 id="2-one-claude-code-profile-per-account"><a class="anchor" href="#2-one-claude-code-profile-per-account">#</a>2. One Claude Code profile per account</h2>
 <h2 id="context"><a class="anchor" href="#context">#</a>Context</h2>
 <p>Claude Code keeps one login in its config folder (<code>~/.claude</code>). Tools like claude-swap switch accounts by saving that login away and writing another one in its place. That makes switching global and destructive: every running session's login changes underneath it, a switch while Claude refreshes its token can lose a login, and two accounts can never be used at the same time.</p>
 <p>Claude Code also reads <code>CLAUDE_CONFIG_DIR</code>: point it at another folder and that folder is a complete, separate profile with its own login.</p>

@@ -3,7 +3,7 @@
 Every account is a Claude Code *profile*: a config folder Claude Code uses
 when CLAUDE_CONFIG_DIR points at it. The account you were already signed in
 to keeps ~/.claude as its profile ("main"); every other account gets
-~/.local/share/vesha/profiles/<name>. A login lives in exactly one profile:
+~/.local/state/vesha/profiles/<name>. A login lives in exactly one profile:
 Claude Code rotates refresh tokens, so two copies of one login would sign
 each other out.
 
@@ -21,7 +21,10 @@ import urllib.error
 import urllib.request
 
 HOME = os.path.expanduser("~")
-DATA = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local/share"), "vesha")
+# Accounts and profiles live in the state folder: ~/.local/share/vesha is where
+# installers (kosha, install.sh) put vesha itself.
+DATA = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(HOME, ".local/state"), "vesha")
+LEGACY = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local/share"), "vesha")   # before v0.1.1
 CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache"), "vesha")
 CONFIG = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"), "vesha", "config.toml")
 MAIN_DIR = os.path.join(HOME, ".claude")
@@ -59,7 +62,27 @@ def config():
 
 
 # ===================================================================== state
+def migrate():
+    """Moves accounts and profiles from where v0.1.0 kept them (the folder
+    vesha itself installs into) to DATA. Once, and only out of a folder that
+    isn't a checkout."""
+    old = os.path.join(LEGACY, "accounts.json")
+    if not os.path.exists(old) or os.path.exists(STATE) or os.path.isdir(os.path.join(LEGACY, ".git")):
+        return
+    if any(d.startswith(LEGACY + os.sep) for d in running_profiles()):
+        return   # a session runs on an old profile: move once it's gone
+    os.makedirs(DATA, mode=0o700, exist_ok=True)
+    for item in ("accounts.json", "profiles"):
+        if os.path.lexists(os.path.join(LEGACY, item)):
+            os.replace(os.path.join(LEGACY, item), os.path.join(DATA, item))
+    try:
+        os.rmdir(LEGACY)   # only if nothing else is left
+    except OSError:
+        pass
+
+
 def load():
+    migrate()
     try:
         with open(STATE) as f:
             st = json.load(f)

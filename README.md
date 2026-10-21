@@ -262,7 +262,7 @@ hides itself with fewer than two accounts.
 ## How it works
 
 - **One profile per account.** The account already in `~/.claude` stays
-  there; each other one gets `~/.local/share/vesha/profiles/<name>`, which
+  there; each other one gets `~/.local/state/vesha/profiles/<name>`, which
   Claude Code uses through `CLAUDE_CONFIG_DIR`. Your setup (CLAUDE.md,
   settings, skills, plugins, agents, commands, output styles, keybindings)
   is linked into every profile from `~/.claude`, and with `share_history`
@@ -275,7 +275,7 @@ hides itself with fewer than two accounts.
   usage, vesha calls the same endpoint Claude Code's `/usage` does, renewing
   an expired token itself only when no Claude Code is running on that
   profile.
-- **State** is `~/.local/share/vesha/accounts.json` (names, which is
+- **State** is `~/.local/state/vesha/accounts.json` (names, which is
   active, folder rules; private to you), usage is cached in
   `~/.cache/vesha`.
 

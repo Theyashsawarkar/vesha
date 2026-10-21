@@ -2,6 +2,17 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.1.1 -- 2026-10-21
+
+- **Accounts and profiles moved to `~/.local/state/vesha`**: v0.1.0 kept them
+  in `~/.local/share/vesha`, where kosha and `install.sh` put vesha itself.
+  They're moved on first run (not while a session runs on an old profile);
+  installing or removing vesha never touches a login (ADR 8).
+- `vesha service status` shows the watcher's last log lines.
+- `vesha list` with no accounts yet is not an error (exit 0); `doctor`
+  checks this home's watcher unit, not just systemd.
+- The switch note is accurate about folder rules and running sessions.
+
 ## v0.1.0 -- 2026-10-21
 
 The first release: every Claude Code account signed in at once, one key to
