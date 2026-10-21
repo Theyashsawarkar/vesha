@@ -2,6 +2,13 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.2.3 -- 2026-10-21
+
+- **Usage bars are thin lines now**: the used part a bold line in green,
+  yellow or red, flowing into a faint hairline for the rest, to half a cell.
+  No background colour, so they suit a transparent terminal and rows no
+  longer run together (v0.2.2's solid pills looked heavy).
+
 ## v0.2.2 -- 2026-10-21
 
 - **Better-looking usage bars**, in the switcher and the CLI: rounded pills

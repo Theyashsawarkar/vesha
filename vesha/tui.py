@@ -157,11 +157,6 @@ class App:
             pairs["cap_" + name] = n   # the rounded ends: the chip's colour on the background
             curses.init_pair(n, self.cp[bgc], bg)
             n += 1
-        for fg in ("green", "yellow", "red", "surface"):   # pill bars: fill on the track, rounded ends
-            for name, bgc in (("bar_", self.cp["surface"]), ("edge_", bg), ("sedge_", self.cp["selbg"])):
-                pairs[name + fg] = n
-                curses.init_pair(n, self.cp[fg], bgc)
-                n += 1
         self.pairs = pairs
 
     def a(self, name, bold=False, sel=False):
@@ -218,18 +213,17 @@ class App:
         self.put(y, x2 + 1, "─" * max(0, x + w - x2 - 2), self.a("faint"))
 
     def bar(self, y, x, pct, width, sel=False):
-        """A pill: rounded ends, a soft track, the fill drawn to an eighth of a cell."""
+        """A thin line: the used part bold in green / yellow / red (to half a
+        cell), the rest a faint hairline. No background, so it suits a
+        transparent terminal and rows don't run together."""
         pct = max(0, min(100, pct))
         color = "red" if pct >= core.config()["warn_at"] else "yellow" if pct >= 50 else "green"   # used up: green → yellow → red
-        inner = max(1, width - 2)
-        eighths = round(inner * 8 * pct / 100)
-        edge = "sedge_" if sel else "edge_"
-        cp = curses.color_pair
-        self.put(y, x, "\ue0b6", cp(self.pairs[edge + (color if eighths else "surface")]))
-        for i in range(inner):
-            part = max(0, min(8, eighths - i * 8))
-            self.put(y, x + 1 + i, "█" if part == 8 else " ▏▎▍▌▋▊▉"[part], cp(self.pairs["bar_" + color]))
-        self.put(y, x + 1 + inner, "\ue0b4", cp(self.pairs[edge + (color if eighths >= inner * 8 else "surface")]))
+        halves = round(width * 2 * pct / 100)
+        full, half = divmod(halves, 2)
+        x = self.put(y, x, "━" * full, self.a(color, True, sel))
+        if half:
+            x = self.put(y, x, "╾", self.a(color, True, sel))   # heavy into light: no gap before the track
+        self.put(y, x, "─" * (width - full - half), self.a("faint", sel=sel))
         return color
 
     def chip(self, y, x, text, kind, pair=None):

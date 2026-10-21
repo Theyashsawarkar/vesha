@@ -182,25 +182,15 @@ def badge_color(pct):
     return "red" if pct >= core.config()["warn_at"] else "yellow" if pct >= 50 else "green"
 
 
-TRACK = (49, 50, 68)   # Catppuccin surface0: the empty part of a bar
-
-
 def bar(pct, width=20):
-    """A pill, like the switcher's: rounded ends, a soft track, the fill drawn
-    to an eighth of a cell. Plain `[####----]` without colour."""
+    """A thin line, like the switcher's: the used part bold in green / yellow /
+    red (to half a cell), the rest a faint hairline. `[####----]` without colour."""
     pct = max(0, min(100, int(pct)))
-    inner = max(1, width - 2)
-    eighths = round(inner * 8 * pct / 100)
     if not ui.TTY:
-        fill = round(inner * pct / 100)
-        return "[" + "#" * fill + "-" * (inner - fill) + "]"
-    r, g, b = ui._COLORS[badge_color(pct)]
-    fg, track = f"38;2;{r};{g};{b}", "48;2;{};{};{}".format(*TRACK)
-    tfg = "38;2;{};{};{}".format(*TRACK)
-    cells = "".join("█" if (part := max(0, min(8, eighths - i * 8))) == 8 else " ▏▎▍▌▋▊▉"[part] for i in range(inner))
-    left = fg if eighths else tfg
-    right = fg if eighths >= inner * 8 else tfg
-    return f"\033[{left}m\ue0b6\033[0m\033[{fg};{track}m{cells}\033[0m\033[{right}m\ue0b4\033[0m"
+        fill = round((width - 2) * pct / 100)
+        return "[" + "#" * fill + "-" * (width - 2 - fill) + "]"
+    full, half = divmod(round(width * 2 * pct / 100), 2)
+    return c("━" * full + "╾" * half, badge_color(pct), bold=True) + c("─" * (width - full - half), "faint")
 
 
 def usage_cell(u, key="five_hour", w=10):
