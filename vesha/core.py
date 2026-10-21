@@ -193,6 +193,42 @@ def login_problems(st):
     return out
 
 
+def repair_plan(st):
+    """What `vesha repair` would do: [(description, action)] where action is
+    a callable applying it to st. Covers a profile whose login another tool
+    (claude-swap, a /login) replaced with a different account's."""
+    plan = []
+    by_identity = {(a.get("email"), a.get("org")): n for n, a in st["accounts"].items() if a.get("email")}
+    for n, a in list(st["accounts"].items()):
+        d = profile_dir(st, n)
+        who = identity(d)
+        if not who["signed_in"] or not a.get("email") or (who["email"], who["org"]) == (a.get("email"), a.get("org")):
+            continue
+        owner = by_identity.get((who["email"], who["org"]))
+        if owner and owner != n and a.get("main"):
+            def swap(st, lost=n, owner=owner):
+                trash = os.path.join(DATA, "trash", f"{owner}-{int(time.time())}")
+                src = os.path.join(PROFILES, owner)
+                if os.path.isdir(src):
+                    os.makedirs(os.path.dirname(trash), mode=0o700, exist_ok=True)
+                    os.replace(src, trash)
+                st["accounts"][owner]["main"] = True
+                st["accounts"][lost]["main"] = False   # its profile is made when it signs in again
+                if st["default"] == lost:
+                    st["default"] = owner
+                cache = _cache()   # the numbers cached for lost were owner's
+                cache.pop(lost, None)
+                _save_cache(cache)
+            plan.append((f"~/.claude now holds {owner}'s login ({who['email']}): {owner} becomes the account in ~/.claude, "
+                         f"its old profile (a copy of the same login) goes to {os.path.join(DATA, 'trash').replace(HOME, '~')}, "
+                         f"and {n} needs signing in again (vesha login {n})", swap))
+        elif not owner:
+            def adopt(st, n=n, who=who):
+                st["accounts"][n].update(email=who["email"], org=who["org"], plan=who["plan"])
+            plan.append((f"{n}'s profile now holds {who['email']} ({who['org'] or 'no org'}): record {n} as that account", adopt))
+    return plan
+
+
 def link_shared(d, share_history=True):
     """Links ~/.claude's shared setup into a profile (never over real files)."""
     os.makedirs(d, exist_ok=True)

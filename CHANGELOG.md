@@ -2,6 +2,19 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.1.3 -- 2026-10-21
+
+- **`vesha repair`**: when another tool replaced a profile's login (e.g.
+  claude-swap wrote another account into `~/.claude`), two accounts showed
+  the same usage under the wrong email. repair makes the records match the
+  logins, moves the duplicate profile to vesha's trash folder, forgets the
+  numbers cached under the wrong name, and says which account to sign in
+  again. It shows the plan and asks first.
+- **The switcher flags it**: a red "login changed" tag and a line saying who
+  is really signed in; `vesha doctor` points to `vesha repair`.
+- **`vesha login <name>`** tells you which account to pick, and refuses one
+  that is already another account's.
+
 ## v0.1.2 -- 2026-10-21
 
 - **Catches logins changed behind vesha's back**: `vesha doctor` says when a

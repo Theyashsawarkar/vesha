@@ -48,6 +48,14 @@ COMMANDS = {
                             "Claude Code is already signed in to, in place. `vesha login <name>` signs an existing account "
                             "in again after its login expired.",
                 examples=["vesha add personal", "vesha add work --current"]),
+    "repair": dict(group="Accounts", aliases=["fix"], args="[-y]",
+                   summary="Fix profiles whose login another tool replaced (claude-swap, a /login)",
+                   description="When ~/.claude ends up holding another account's login (claude-swap switched it, or a "
+                               "/login there), vesha shows the wrong account and two profiles share one login, which logs "
+                               "one of them out on the next token renewal. repair makes the records match the logins, moves "
+                               "the duplicate profile to vesha's trash folder, and tells you which account to sign in again. "
+                               "It shows the plan and asks first. `vesha doctor` says when it's needed.",
+                   examples=["vesha repair", "vesha login personal"]),
     "remove": dict(group="Accounts", aliases=["rm"], args="<account> [-y]",
                    summary="Forget an account (and delete its profile)", examples=["vesha rm client-x"]),
     "rename": dict(group="Accounts", aliases=["mv"], args="<old> <new>",
@@ -420,7 +428,7 @@ def cmd_add(ctx):
     if not ctx.args:
         raise VeshaError("name it: vesha add <name>   (vesha add <name> --current for the account already signed in)")
     name = core.check_name(ctx.args[0])
-    if name in st["accounts"] and ctx.flags & {"--login"} or (name in st["accounts"] and sys.argv[1] == "login"):
+    if name in st["accounts"] and "--login" in ctx.flags:
         return relogin(st, name)
     if "--current" in ctx.flags:
         who = core.adopt_main(st, name)
@@ -446,17 +454,49 @@ def cmd_add(ctx):
 
 def relogin(st, name):
     d = core.profile_dir(st, name)
+    a = st["accounts"][name]
     ui.header(f"Signing {name} in again")
+    if a.get("email"):
+        ui.note(f"sign in as {c(a['email'], 'text', bold=True)}" + (f" ({a['org']})" if a.get("org") else ""))
     env = dict(os.environ)
     if d != core.MAIN_DIR:
+        core.link_shared(d, core.config()["share_history"])
         env["CLAUDE_CONFIG_DIR"] = d
     subprocess.run([core.real_claude(), "auth", "login"], env=env)
     who = core.identity(d)
     if not who["signed_in"]:
         raise VeshaError("still not signed in")
+    for other, o in st["accounts"].items():
+        if other != name and (o.get("email"), o.get("org")) == (who["email"], who["org"]):
+            raise VeshaError(f"that's {other}'s account ({who['email']}): run vesha login {name} again and pick "
+                             f"{a.get('email') or 'the other account'} in the browser")
     st["accounts"][name].update(email=who["email"], org=who["org"], plan=who["plan"])
     core.save(st)
     ui.ok(f"{c(name, 'peach', bold=True)} is signed in {c('(' + who['email'] + ')', 'dim')}")
+    return 0
+
+
+def cmd_repair(ctx):
+    st = core.load()
+    plan = core.repair_plan(st)
+    if not plan:
+        ui.ok("every profile holds the login vesha expects: nothing to repair")
+        return 0
+    ui.header("Repair")
+    for text, _ in plan:
+        ui.out(f"  {c('•', 'peach')} {text}")
+    ui.out()
+    if not ui.confirm(assume=True if ctx.yes else None):
+        return 1
+    for _, act in plan:
+        act(st)
+    core.save(st)
+    notify_bar()
+    ui.ok("repaired")
+    for n, a in st["accounts"].items():
+        if not core.identity(core.profile_dir(st, n))["signed_in"]:
+            ui.note(f"{n} isn't signed in: {c('vesha login ' + n, 'peach', bold=True)}"
+                    + (f" (pick {a['email']})" if a.get("email") else ""))
     return 0
 
 
@@ -683,6 +723,8 @@ def cmd_doctor(ctx):
         d = core.profile_dir(st, n)
         who = core.identity(d)
         issues = list(logins.get(n, []))
+        if issues:
+            issues.append(f"fix: {c('vesha repair', 'peach', bold=True)}")
         if not who["signed_in"]:
             issues.append(f"signed out: vesha login {n}")
         if who["login_expires"] and who["login_expires"] < time.time() + 7 * 86400:
@@ -753,7 +795,7 @@ def cmd_waybar(ctx):
 
 HANDLERS = {"list": cmd_list, "switch": cmd_switch, "usage": cmd_usage, "which": cmd_which, "run": cmd_run, "use": cmd_use,
             "auto": cmd_auto, "pause": lambda x: cmd_pause(x, True), "resume": lambda x: cmd_pause(x, False),
-            "add": cmd_add, "remove": cmd_remove, "rename": cmd_rename, "import": cmd_import, "map": cmd_map,
+            "add": cmd_add, "repair": cmd_repair, "remove": cmd_remove, "rename": cmd_rename, "import": cmd_import, "map": cmd_map,
             "unmap": cmd_unmap, "install-shim": cmd_install_shim, "uninstall-shim": cmd_uninstall_shim,
             "service": cmd_service, "init": cmd_init, "doctor": cmd_doctor, "waybar": cmd_waybar, "watch": cmd_watch}
 
@@ -785,6 +827,8 @@ def main(argv):
         return 0
     if cmd == "watch":   # internal: the systemd unit's long-running loop
         return cmd_watch(Ctx(rest)) or 0
+    if cmd == "login":
+        rest = rest + ["--login"]
     cmd = ALIASES.get(cmd, cmd)
     if cmd == "help":
         if rest and ALIASES.get(rest[0], rest[0]) in COMMANDS:

@@ -140,5 +140,30 @@ class Migrate(unittest.TestCase):
         self.assertTrue(os.path.exists(os.path.join(old, "accounts.json")))
 
 
+class Repair(unittest.TestCase):
+    def test_main_overwritten_with_another_accounts_login(self):
+        root = tempfile.mkdtemp()
+        main, prof = os.path.join(root, ".claude"), os.path.join(root, "state", "profiles")
+        who = {main: ("w@acme.dev", "Acme"), os.path.join(prof, "work"): ("w@acme.dev", "Acme")}
+        os.makedirs(os.path.join(prof, "work"))
+        s = {"default": "personal", "folders": {}, "accounts": {
+            "personal": {"main": True, "email": "p@example.com", "org": "P"},
+            "work": {"main": False, "email": "w@acme.dev", "org": "Acme"}}}
+
+        def ident(d):
+            e, o = who.get(d, ("", ""))
+            return {"email": e, "org": o, "plan": "Team", "signed_in": bool(e)}
+        with mock.patch.multiple(core, MAIN_DIR=main, PROFILES=prof, DATA=os.path.join(root, "state"),
+                                 CACHE=os.path.join(root, "cache"), identity=ident):
+            plan = core.repair_plan(s)
+            self.assertEqual(len(plan), 1)
+            plan[0][1](s)
+        self.assertTrue(s["accounts"]["work"]["main"])
+        self.assertFalse(s["accounts"]["personal"]["main"])
+        self.assertEqual(s["default"], "work")
+        self.assertFalse(os.path.exists(os.path.join(prof, "work")))   # moved to trash, not deleted
+        self.assertEqual(len(os.listdir(os.path.join(root, "state", "trash"))), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

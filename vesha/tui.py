@@ -211,10 +211,11 @@ class App:
         name_w = max(14, max([len(x) for x in names] + [0]) + 2)
         infos = {n: f"{self.st['accounts'][n].get('email') or '–'} · {self.st['accounts'][n].get('plan') or '–'}" for n in names}
         info_w = max([len(x) for x in infos.values()] + [10])
+        problems = core.login_problems(self.st)
         rows = []
         for n in names[top: top + list_h]:
             acc = self.st["accounts"][n]
-            tags = []
+            tags = [("login changed", "red")] if problems.get(n) else []
             if n == self.st["default"]:
                 tags.append(("active", "peach"))
             if n == here and n != self.st["default"]:
@@ -284,6 +285,9 @@ class App:
                 days = int((exp - time.time()) / 86400)
                 login += f" · login good for {days} more day{'s' if days != 1 else ''}"
             folders = [f.replace(core.HOME, "~", 1) for f, n in self.folders() if n == cur]
+            for i, p in enumerate(problems.get(cur, [])[:2]):
+                self.put(y + i, 3, ("! " + p + " (vesha repair)")[: w - 6], self.a("red", True))
+            y += len(problems.get(cur, [])[:2]) + (1 if problems.get(cur) else 0)
             facts = [("account", " · ".join(x for x in (acc.get("email"), acc.get("plan"), acc.get("org")) if x) or "–", "sub"),
                      ("login", login, "green" if who["signed_in"] else "red"),
                      ("profile", d.replace(core.HOME, "~") + ("  (Claude Code's own)" if d == core.MAIN_DIR else ""), "sub"),

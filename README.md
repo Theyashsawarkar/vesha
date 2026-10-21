@@ -172,6 +172,7 @@ Every command has `--help` with examples; `vesha help` lists them all.
 | `vesha auto on\|off` | Automatic switching at the limit |
 | `vesha pause <name>` / `resume` | Keep an account out of automatic switching |
 | `vesha add <name> [--current]` | Sign in a new account, or adopt the current one (`login` signs in again) |
+| `vesha repair` | Fix profiles whose login another tool replaced (`fix`) |
 | `vesha remove <name>` | Forget an account and delete its profile (`rm`) |
 | `vesha rename <old> <new>` | Rename an account (`mv`) |
 | `vesha import cswap` | Bring your claude-swap accounts across |
@@ -298,6 +299,11 @@ and every login, and prints the command that fixes each problem.
 
 - **`claude` ignores the switch**: another `claude` comes first on your
   PATH. `vesha doctor` says which; put `~/.local/bin` first.
+- **Two accounts show the same usage, or "login changed"**: another tool
+  (claude-swap, a `/login` inside Claude Code) replaced a profile's login,
+  usually `~/.claude`'s, with another account's. `vesha repair` shows what it
+  will fix and asks; then `vesha login <name>` signs the account that lost
+  its login in again. Uninstall claude-swap so it can't happen again.
 - **An account shows "signed out"**: its login expired or was revoked.
   `vesha login <name>` signs it in again.
 - **Usage shows "token renewing in Claude"**: Claude Code is running on that
