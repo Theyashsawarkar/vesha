@@ -165,5 +165,82 @@ class Repair(unittest.TestCase):
         self.assertEqual(len(os.listdir(os.path.join(root, "state", "trash"))), 1)
 
 
+class Activate(unittest.TestCase):
+    """Switching moves logins: the target's into ~/.claude, the old one out."""
+
+    def setUp(self):
+        import json
+        self.json = json
+        self.root = tempfile.mkdtemp()
+        self.main = os.path.join(self.root, ".claude")
+        self.main_json = os.path.join(self.root, ".claude.json")
+        self.prof = os.path.join(self.root, "state", "profiles")
+        os.makedirs(self.main)
+        os.makedirs(os.path.join(self.prof, "b"))
+        self.write(os.path.join(self.main, ".credentials.json"), {"claudeAiOauth": {"refreshToken": "rt-a", "expiresAt": 0}})
+        self.write(self.main_json, {"oauthAccount": {"emailAddress": "a@x"}, "projects": {"keep": 1}})
+        self.write(os.path.join(self.prof, "b", ".credentials.json"), {"claudeAiOauth": {"refreshToken": "rt-b"}})
+        self.write(os.path.join(self.prof, "b", ".claude.json"), {"oauthAccount": {"emailAddress": "b@x"}})
+        self.st = {"default": "a", "folders": {}, "accounts": {"a": {"main": True}, "b": {"main": False}}}
+        self.patch = mock.patch.multiple(core, MAIN_DIR=self.main, MAIN_JSON=self.main_json, PROFILES=self.prof,
+                                         DATA=os.path.join(self.root, "state"), STATE=os.path.join(self.root, "state", "a.json"),
+                                         running_profiles=lambda: {})
+        self.patch.start()
+
+    def tearDown(self):
+        self.patch.stop()
+
+    def write(self, path, data):
+        with open(path, "w") as f:
+            self.json.dump(data, f)
+
+    def read(self, path):
+        with open(path) as f:
+            return self.json.load(f)
+
+    def test_moves_logins_never_copies(self):
+        with mock.patch.object(core.time, "sleep", lambda s: None):
+            old = core.activate(self.st, "b")
+        self.assertEqual(old, "a")
+        self.assertEqual(self.read(os.path.join(self.main, ".credentials.json"))["claudeAiOauth"]["refreshToken"], "rt-b")
+        self.assertEqual(self.read(os.path.join(self.prof, "a", ".credentials.json"))["claudeAiOauth"]["refreshToken"], "rt-a")
+        self.assertFalse(os.path.exists(os.path.join(self.prof, "b")))           # b's login lives only in ~/.claude now
+        self.assertEqual(self.read(self.main_json)["oauthAccount"]["emailAddress"], "b@x")
+        self.assertEqual(self.read(self.main_json)["projects"], {"keep": 1})     # the rest of ~/.claude.json stays
+        self.assertEqual(self.read(os.path.join(self.prof, "a", ".claude.json"))["oauthAccount"]["emailAddress"], "a@x")
+        self.assertTrue(self.st["accounts"]["b"]["main"] and not self.st["accounts"]["a"]["main"])
+        self.assertEqual(self.st["default"], "b")
+
+    def test_refuses_while_the_target_profile_is_in_use(self):
+        busy = {os.path.realpath(os.path.join(self.prof, "b")): 1}
+        with mock.patch.object(core, "running_profiles", lambda: busy):
+            with self.assertRaises(core.VeshaError):
+                core.activate(self.st, "b")
+        self.assertTrue(os.path.exists(os.path.join(self.prof, "b", ".credentials.json")))   # nothing moved
+
+    def test_a_renewal_during_the_swap_is_kept(self):
+        def renew(_s):   # Claude renews the old login into ~/.claude right after the swap
+            self.write(os.path.join(self.main, ".credentials.json"), {"claudeAiOauth": {"refreshToken": "rt-a2"}})
+        with mock.patch.object(core.time, "sleep", renew):
+            core.activate(self.st, "b")
+        self.assertEqual(self.read(os.path.join(self.main, ".credentials.json"))["claudeAiOauth"]["refreshToken"], "rt-b")
+        self.assertEqual(self.read(os.path.join(self.prof, "a", ".credentials.json"))["claudeAiOauth"]["refreshToken"], "rt-a2")
+
+
+class ResetLabels(unittest.TestCase):
+    def iso(self, days, hour=9):
+        from datetime import datetime, timedelta
+        d = (datetime.now().astimezone() + timedelta(days=days)).replace(hour=hour, minute=40, second=0, microsecond=0)
+        return d.isoformat()
+
+    def test_today_tomorrow_weekday_date(self):
+        from datetime import datetime, timedelta
+        self.assertEqual(core.resets_in(self.iso(0, 23))[1], "today 11:40 PM")
+        self.assertEqual(core.resets_in(self.iso(1))[1], "tomorrow 9:40 AM")
+        wd = (datetime.now() + timedelta(days=3)).strftime("%a")
+        self.assertEqual(core.resets_in(self.iso(3))[1], f"{wd} 9:40 AM")
+        self.assertRegex(core.resets_in(self.iso(10))[1], r"^[A-Z][a-z]{2} \d{1,2} 9:40 AM$")
+
+
 if __name__ == "__main__":
     unittest.main()

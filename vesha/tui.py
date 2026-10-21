@@ -400,9 +400,7 @@ class App:
                         self.put(cy, lx, label, self.a("dim"))
                         color = self.bar(cy, lx + 9, p, bw)
                         ex = self.put(cy, lx + 10 + bw, f"{p:>3}%", self.a(color, True))
-                        reset = f"resets {clock}" + (f" (in {rel})" if rel else "")
-                        if ex + 2 + len(reset) > lx + iw:
-                            reset = f"in {rel}" if rel else clock
+                        reset = f"↻ {clock}" if clock else ""   # when it resets: today 9:40 PM, Sat 6:00 AM
                         self.put(cy, ex + 2, reset[: max(0, lx + iw - ex - 2)], self.a("dim"))
                         cy += 1
                 if u.get("stale"):
@@ -563,10 +561,14 @@ class App:
         if n == self.st["default"]:
             self.toast(f"{n} is already the active account", "warn")
             return
-        self.st["default"] = n
-        self.save_reload()
+        try:
+            core.activate(self.st, n)
+        except core.VeshaError as e:
+            self.toast(str(e), "err")
+            return
+        self.st = core.load()
         core.signal_bar()
-        self.toast(f"✓ {n} is active: every new claude, in any folder, uses it")
+        self.toast(f"✓ {n} is active: running claude sessions use it from their next message, new ones too")
 
     def act_pause(self):
         n = self.current()

@@ -1,6 +1,6 @@
 # 5. A `claude` wrapper decides the account
 
-**Status:** Accepted  
+**Status:** Accepted; for the active account, superseded by [ADR 9](0009-switch-by-moving-logins.md)  
 **Date:** 2026-10-21
 
 ## Context

@@ -11,10 +11,13 @@ from .core import VeshaError
 from .ui import c
 
 COMMANDS = {
-    "switch": dict(group="Switch", aliases=["sw", "s"], args="[<account>]",
+    "switch": dict(group="Switch", aliases=["sw", "s"], args="[<account>] [--force]",
                    summary="Make an account the active one (no name: the next one)",
-                   description="Every new `claude`, in any folder, uses the active account (unless this terminal or a "
-                               "folder rule says otherwise). Claude sessions already running keep theirs.",
+                   description="Moves the account's login into ~/.claude, so every claude uses it: sessions already "
+                               "running from their next message, new ones in any folder (unless this terminal or a "
+                               "folder rule says otherwise). The login that was there moves to its own profile; nothing "
+                               "is copied. --force switches even while a claude session runs inside the account's own "
+                               "profile (it loses its login).",
                    examples=["vesha switch personal", "vesha sw", "vesha switch work"]),
     "list": dict(group="Switch", aliases=["ls", "status"], args="[--json] [-r]",
                  summary="Every account: plan, usage, which is active",
@@ -197,8 +200,8 @@ def usage_cell(u, key="five_hour", w=10):
     if isinstance(u, VeshaError) or not isinstance(u, dict) or key not in u:
         return c("–", "faint")
     p = u[key]["pct"]
-    rel, _ = core.resets_in(u[key].get("resets_at"))
-    return f"{bar(p, w)} {c(f'{p:>3}%', badge_color(p), bold=True)} {c(rel, 'dim')}"
+    _, when = core.resets_in(u[key].get("resets_at"))
+    return f"{bar(p, w)} {c(f'{p:>3}%', badge_color(p), bold=True)} {c(when, 'dim')}"
 
 
 def board_usage(st, names, fresh, title="Checking usage"):
@@ -275,21 +278,17 @@ def cmd_switch(ctx):
         names = list(st["accounts"])
         i = names.index(st["default"]) if st["default"] in names else -1
         name = names[(i + 1) % len(names)]
-    old = st["default"]
-    st["default"] = name
-    core.save(st)
+    old = core.activate(st, name, force="--force" in ctx.flags)
     notify_bar()
     a = st["accounts"][name]
     ui.ok(f"{c(name, 'peach', bold=True)} is active {c('(' + (a.get('email') or '') + ')', 'dim')}"
           + (c(f"   was {old}", "dim") if old and old != name else ""))
-    if not core.is_shim(os.path.join(core.BIN, "claude")):
-        ui.warn("the claude wrapper isn't installed, so plain `claude` won't follow: vesha install-shim")
-    else:
-        live = sum(core.running_profiles().values())
-        mapped = sum(1 for n in st["folders"].values() if n != name)
-        where = "in every folder" + (f" without a folder rule ({mapped} have one)" if mapped else "")
-        running = f"; {live} running session{'s' if live != 1 else ''} keep{'s' if live == 1 else ''} its account" if live else ""
-        ui.note(f"new claude sessions use it, {where}{running}")
+    live = core.running_profiles().get(os.path.realpath(core.MAIN_DIR), 0)
+    mapped = sum(1 for n in st["folders"].values() if n != name)
+    sess = f"{live} running claude session{'s' if live != 1 else ''}"
+    parts = [f"{sess} use{'s' if live == 1 else ''} it from the next message"] if live else []
+    parts.append("new ones too" + (f", except in the {mapped} folder{'s' if mapped != 1 else ''} with a rule" if mapped else ""))
+    ui.note("; ".join(parts))
     return 0
 
 
@@ -321,12 +320,12 @@ def cmd_usage(ctx):
             if key not in u:
                 continue
             p = u[key]["pct"]
-            rel, clock = core.resets_in(u[key].get("resets_at"))
+            _, clock = core.resets_in(u[key].get("resets_at"))
             if p >= warn_at:
                 near.add(n)
             name = c(ui.pad(n, nw), "text", bold=True) + mark if i == 0 else " " * (nw + 2)
             ui.out(f"{name}  {c(label, 'dim')} {bar(p)} {c(f'{p:>3}%', badge_color(p), bold=True)}  "
-                   f"{c('resets ' + clock, 'dim')} {c('(in ' + rel + ')', 'faint') if rel else ''}")
+                   f"{c('resets', 'dim')} {c(clock, 'sub')}")
         if u.get("stale"):
             ui.out(" " * (nw + 6) + c(f"last known numbers ({u['stale']})", "faint"))
     ok_n = sum(1 for n, u in use.items() if isinstance(u, dict) and n not in near)
@@ -775,7 +774,7 @@ def cmd_waybar(ctx):
                 u = core.usage(st, [name]).get(name)
                 h = u.get("five_hour", {}) if isinstance(u, dict) else {}
                 p = h.get("pct")
-                rel, clock = core.resets_in(h.get("resets_at"))
+                _, clock = core.resets_in(h.get("resets_at"))
                 conf = core.config()
                 cls = "unknown" if p is None else "full" if p >= conf["switch_at"] else "warn" if p >= conf["warn_at"] else "ok"
                 lines = [f"Claude: {name}  ({st['accounts'][name].get('email', '')})"]
@@ -783,7 +782,7 @@ def cmd_waybar(ctx):
                 for n in st["accounts"]:
                     un = use_all.get(n)
                     if isinstance(un, dict) and "five_hour" in un:
-                        r5, c5 = core.resets_in(un["five_hour"].get("resets_at"))
+                        _, c5 = core.resets_in(un["five_hour"].get("resets_at"))
                         lines.append(f"{'●' if n == name else '○'} {n}: 5h {un['five_hour']['pct']}% (resets {c5})"
                                      + (f" · week {un['seven_day']['pct']}%" if "seven_day" in un else ""))
                 lines += ["", "Click: the switcher · Scroll: the next account"]

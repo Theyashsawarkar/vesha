@@ -36,11 +36,18 @@ def notify(title, body, urgency="normal", actions=None):
 
 
 def switch_to(st, name, why):
+    """Moves `name`'s login into ~/.claude (core.activate). Returns False, and
+    says why, when it can't."""
     old = st["default"]
-    st["default"] = name
-    core.save(st)
+    try:
+        core.activate(st, name)
+    except core.VeshaError as e:
+        log(f"couldn't switch {old} -> {name}: {e}")
+        notify(f"Claude: couldn't switch to {name}", str(e), "critical")
+        return False
     core.signal_bar()
     log(f"switched {old} -> {name} ({why})")
+    return True
 
 
 def worst(u):
@@ -98,15 +105,16 @@ def tick(warned):
     u = use.get(active) if isinstance(use.get(active), dict) else {}
     pct, window = worst(u) if u else (0, None)
     label = "5-hour" if window == "five_hour" else "weekly"
-    rel, clock = core.resets_in(u.get(window, {}).get("resets_at") if window else None)
+    _, clock = core.resets_in(u.get(window, {}).get("resets_at") if window else None)
     if action == "switch":
-        switch_to(st, alt, f"{active} at {pct}% of its {label} limit")
+        if not switch_to(st, alt, f"{active} at {pct}% of its {label} limit"):
+            return conf["check_every"]
         a5 = use[alt].get("five_hour", {}).get("pct", 0)
-        notify(f"Claude: switched to {alt}", f"{active} reached its {label} limit (resets {clock}).\n"
-               f"New Claude sessions use {alt} ({a5}% used). Restart a running one to continue there.")
+        notify(f"Claude: switched to {alt}", f"{active} reached its {label} limit (it resets {clock}).\n"
+               f"Every Claude session uses {alt} ({a5}% used) from its next message.")
     elif action == "full":
         msg = f"{alt} has room: vesha switch {alt}" if alt else "every other account is at its limit too"
-        notify(f"Claude: {active} reached its {label} limit", f"Resets {clock} (in {rel}); {msg}.", "critical")
+        notify(f"Claude: {active} reached its {label} limit", f"It resets {clock}; {msg}.", "critical")
     elif action == "warn":
         if alt:
             a5 = use[alt].get("five_hour", {}).get("pct", 0)
@@ -119,7 +127,7 @@ def tick(warned):
                         switch_to(s2, alt, "chosen from the notification")
             threading.Thread(target=ask, daemon=True).start()
         else:
-            notify(f"Claude: {active} at {pct}% of its {label} limit", f"Resets {clock} (in {rel}).")
+            notify(f"Claude: {active} at {pct}% of its {label} limit", f"It resets {clock}.")
     near = pct >= conf["warn_at"]
     return min(conf["check_every"], 60) if near else conf["check_every"]
 

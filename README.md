@@ -53,12 +53,11 @@ room left and tells you.
 
 ## Features
 
-- **Every account signed in at once**: each account is its own Claude Code
-  profile; switching never signs anything out, and sessions already
-  running keep going on their account.
-- **Switch from anywhere**: `vesha switch work` (or one key in the
-  switcher) changes the account every new `claude` uses, in every folder
-  and every terminal. No restart, no re-login.
+- **Every account signed in at once**: switching never signs anything out.
+- **Switch from anywhere, running sessions included**: `vesha switch work`
+  (or one key in the switcher) moves work's login into `~/.claude`, so
+  every `claude` uses it: sessions already running from their next message,
+  new ones in every folder and terminal. No restart, no re-login.
 - **Automatic switching at the limit**: a small background watcher warns
   you near the limit (with a "Switch to …" button on the notification) and
   switches by itself when the active account runs out, to the account with
@@ -221,9 +220,8 @@ it's close):
 - At **85%** of either limit it notifies you once per window, with a
   **Switch to …** button naming the account with the most room.
 - At **98%** it switches the active account to that account and tells you
-  which one, and when the old one resets. New `claude` sessions use it
-  everywhere; a session that hit the limit continues on the new account
-  when you restart it (`claude --continue`: the history is shared).
+  which one, and when the old one resets. Every `claude` uses it from its
+  next message, the session that hit the limit included.
 - If every account is at its limit, it tells you when the first one resets.
 
 "Most room" means the lowest of each account's worse window (a 5-hour
@@ -288,17 +286,27 @@ hides itself with fewer than two accounts.
 
 ## How it works
 
-- **One profile per account.** The account already in `~/.claude` stays
-  there; each other one gets `~/.local/state/vesha/profiles/<name>`, which
-  Claude Code uses through `CLAUDE_CONFIG_DIR`. Your setup (CLAUDE.md,
+- **The active account lives in `~/.claude`**, the folder every `claude`
+  reads; each other account has its own profile,
+  `~/.local/state/vesha/profiles/<name>`. Switching moves the target's
+  login into `~/.claude` and the one that was there into its profile, each
+  file replaced in one step, so running sessions pick up the new account on
+  their next request (they re-read the login), like claude-swap but without
+  copies. A switch waits while Claude renews the active login, and is
+  refused while a session runs inside the target's own profile.
+- **Profiles for the rest.** Folder rules, `vesha use` and `vesha run`
+  start Claude Code on another account's profile (`CLAUDE_CONFIG_DIR`).
+  Your setup (CLAUDE.md,
   settings, skills, plugins, agents, commands, output styles, keybindings)
   is linked into every profile from `~/.claude`, and with `share_history`
   so are your projects, history, todos, file history and plans.
 - **The wrapper.** `vesha install-shim` puts a small `claude` in
-  `~/.local/bin` that asks vesha which account applies and runs the real
-  Claude Code with that profile. It adds a few milliseconds.
+  `~/.local/bin` that asks vesha which account applies here (a terminal or
+  folder rule, else the active one in `~/.claude`) and runs the real Claude
+  Code with that profile. It adds a few milliseconds.
 - **One copy of each login.** Claude Code rotates its login tokens, so
-  vesha never copies them: each login lives only in its profile. To read
+  vesha never copies them: each login lives in one place, `~/.claude` or
+  its profile, and switching moves it. To read
   usage, vesha calls the same endpoint Claude Code's `/usage` does, renewing
   an expired token itself only when no Claude Code is running on that
   profile.

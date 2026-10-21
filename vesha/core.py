@@ -194,6 +194,111 @@ def login_problems(st):
     return out
 
 
+def _refresh_token(path):
+    try:
+        with open(path) as f:
+            return (json.load(f).get("claudeAiOauth") or {}).get("refreshToken")
+    except (OSError, ValueError):
+        return None
+
+
+def _set_identity(json_path, oauth):
+    """Writes who is signed in (oauthAccount) into a profile's .claude.json,
+    keeping everything else in it."""
+    try:
+        with open(json_path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    if oauth:
+        data["oauthAccount"] = oauth
+    else:
+        data.pop("oauthAccount", None)
+    write_private(json_path, data, indent=2)
+
+
+def activate(st, name, force=False):
+    """Makes `name` the active account. Its login moves into ~/.claude, which
+    every `claude` reads (running sessions too, from their next request), and
+    the login that was there moves to its own profile. Logins are moved,
+    never left copied (ADR 9). Returns the account that was active."""
+    accs = st["accounts"]
+    if name not in accs:
+        raise VeshaError(f"no account called {name}")
+    main = next((n for n, a in accs.items() if a.get("main")), None)
+    if main == name:
+        st["default"] = name
+        save(st)
+        return name
+    src = os.path.join(PROFILES, name)
+    if not os.path.exists(os.path.join(src, ".credentials.json")):
+        raise VeshaError(f"{name} isn't signed in: vesha login {name}")
+    busy = running_profiles().get(os.path.realpath(src), 0)
+    if busy and not force:
+        raise VeshaError(f"{busy} claude session{'s' if busy != 1 else ''} run{'s' if busy == 1 else ''} as {name} in its own "
+                         f"profile and would lose {'its' if busy == 1 else 'their'} login: close {'it' if busy == 1 else 'them'}, "
+                         f"or vesha switch {name} --force")
+    main_cred = os.path.join(MAIN_DIR, ".credentials.json")
+    if main is None:   # ~/.claude holds no account vesha knows: just move this one in
+        if os.path.exists(main_cred):
+            raise VeshaError("~/.claude holds a login vesha doesn't know: vesha add <name> --current first")
+        os.makedirs(MAIN_DIR, exist_ok=True)
+        os.replace(os.path.join(src, ".credentials.json"), main_cred)
+        _set_identity(MAIN_JSON, read_profile_json(src).get("oauthAccount"))
+        shutil.rmtree(src, ignore_errors=True)
+        accs[name]["main"] = True
+        st["default"] = name
+        save(st)
+        return None
+    # Claude renews a token by rewriting ~/.claude's file: don't swap in the
+    # middle of that (the renewed old login would land on top of the new one).
+    try:
+        with open(main_cred) as f:
+            exp = (json.load(f).get("claudeAiOauth") or {}).get("expiresAt", 0) / 1000
+    except (OSError, ValueError):
+        exp = 0
+    if running_profiles().get(os.path.realpath(MAIN_DIR)) and 0 < exp - time.time() < 120 and not force:
+        raise VeshaError("Claude is about to renew the active login: try again in two minutes")
+    dst = os.path.join(PROFILES, main)
+    if os.path.lexists(dst):
+        raise VeshaError(f"{dst.replace(HOME, '~')} is in the way: move it aside first")
+    old_identity = read_profile_json(MAIN_DIR).get("oauthAccount")
+    new_identity = read_profile_json(src).get("oauthAccount")
+    with open(main_cred, "rb") as f:
+        old_cred = f.read()
+    with open(os.path.join(src, ".credentials.json"), "rb") as f:
+        new_cred = f.read()
+    new_token = _refresh_token(os.path.join(src, ".credentials.json"))
+    # 1. the target's profile folder becomes the old account's profile
+    os.replace(src, dst)
+    # 2. the old login goes there, the new one into ~/.claude; each file is
+    #    replaced in one step, so a running claude never reads half a swap
+    for path, data in ((os.path.join(dst, ".credentials.json"), old_cred), (main_cred, new_cred)):
+        tmp = path + ".vesha-tmp"
+        with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    _set_identity(os.path.join(dst, ".claude.json"), old_identity)
+    _set_identity(MAIN_JSON, new_identity)
+    accs[main]["main"] = False
+    accs[name]["main"] = True
+    st["default"] = name
+    save(st)
+    # 3. a claude that was renewing the old token as we swapped would have
+    #    written it over the new login: put things right if so
+    time.sleep(0.8)
+    now = _refresh_token(main_cred)
+    if now and now != new_token:   # ~/.claude now holds the old account, renewed: that's the copy to keep
+        with open(main_cred, "rb") as f:
+            renewed_old = f.read()
+        for path, data in ((os.path.join(dst, ".credentials.json"), renewed_old), (main_cred, new_cred)):
+            tmp = path + ".vesha-tmp"
+            with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb") as f:
+                f.write(data)
+            os.replace(tmp, path)
+    return main
+
+
 def repair_plan(st):
     """What `vesha repair` would do: [(description, action)] where action is
     a callable applying it to st. Covers a profile whose login another tool
@@ -538,24 +643,34 @@ def usage(st, names=None, fresh=False, on_start=None, on_done=None):
 
 
 def resets_in(iso):
-    """'1h 18m' / '2d 15h' until an ISO time, and the local clock time."""
+    """(how long until it, when it is) for an ISO time: ('1h 18m', 'today 9:40 PM'),
+    ('2d 15h', 'Sat 6:00 AM'). The day reads today / tomorrow / the weekday
+    within a week, else the date."""
     if not iso:
         return "", ""
-    from datetime import datetime
+    from datetime import datetime, timedelta
     try:
-        t = datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+        when = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
     except ValueError:
         return "", ""
-    s = max(0, t - time.time())
+    s = max(0, when.timestamp() - time.time())
     if s >= 86400:
         rel = f"{int(s // 86400)}d {int(s % 86400 // 3600)}h"
     elif s >= 3600:
         rel = f"{int(s // 3600)}h {int(s % 3600 // 60)}m"
     else:
         rel = f"{int(s // 60)}m"
-    lt = time.localtime(t)
-    clock = time.strftime("%-I:%M %p" if s < 86400 else "%a %-I %p", lt)
-    return rel, clock
+    today = datetime.now().astimezone().date()
+    day = when.date()
+    if day == today:
+        label = "today"
+    elif day == today + timedelta(days=1):
+        label = "tomorrow"
+    elif day < today + timedelta(days=7):
+        label = when.strftime("%a")
+    else:
+        label = when.strftime("%b %-d")
+    return rel, f"{label} {when.strftime('%-I:%M %p')}"
 
 
 def best_alternative(st, use, exclude):

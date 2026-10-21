@@ -1,8 +1,10 @@
 # vesha -- notes for AI agents (same as CLAUDE.md)
 
-A Claude Code multi-account manager: every account is its own Claude Code
-profile (`CLAUDE_CONFIG_DIR`); a `claude` wrapper picks the account; a
-watcher switches at the usage limit. Its own repo, pulled into Vayu
+A Claude Code multi-account manager: the active account's login lives in
+~/.claude and switching moves logins in and out (core.activate, ADR 9), so
+running sessions follow; other accounts are profiles (`CLAUDE_CONFIG_DIR`)
+used by folder rules, `vesha use` and `vesha run` through a `claude`
+wrapper; a watcher switches at the usage limit. Its own repo, pulled into Vayu
 (github.com/Theyashsawarkar/vayu, whose CLAUDE.md "Plugins" rules apply);
 it must work without Vayu.
 
@@ -13,7 +15,8 @@ it must work without Vayu.
   runs on that profile (ADR 3). Keep real emails out of output you show,
   tests and screenshots (use example.com).
 - Test with a throwaway HOME (`HOME=$(mktemp -d) bin/vesha ...`), never by
-  switching the user's real accounts unless asked.
+  switching the user's real accounts unless asked: a real switch changes the
+  account of every running Claude session, yours included.
 - Keys in the switcher: `# keybind: Vesha/switcher | <keys> | <Verb> <object>`
   lines in tui.py, the `?` sheet and the README must agree; in Vayu run
   `~/.local/bin/keybind-search.py --check`.

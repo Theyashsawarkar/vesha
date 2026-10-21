@@ -2,6 +2,21 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.3.0 -- 2026-10-21
+
+- **Switching reaches running sessions**: the active account's login now
+  lives in `~/.claude`, and a switch (`vesha switch`, the switcher, or the
+  watcher at the limit) moves the target's login there and the old one to
+  its profile. Every `claude` uses the new account from its next message,
+  the session that hit the limit included, like claude-swap but without
+  copying a login (ADR 9). A switch waits while Claude renews the active
+  login, is refused while a session runs inside the target's own profile
+  (`--force` overrides), and keeps a renewal that lands mid-swap.
+- **Reset times are a day and a time**: "today 9:40 PM", "tomorrow 6:00 AM",
+  "Sat 6:00 AM" (a date further out), in the switcher, `vesha usage`,
+  `vesha list`, waybar's tooltip and the watcher's notifications, instead
+  of "in 4h 12m".
+
 ## v0.2.3 -- 2026-10-21
 
 - **Usage bars are thin lines now**: the used part a bold line in green,

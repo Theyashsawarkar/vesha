@@ -20,7 +20,7 @@
 <nav><a href="../index.html" class="">Overview</a><a href="../changelog.html" class="">Changelog</a><a href="../adr/index.html" class="on hide">Decisions</a><a class="gh" href="https://github.com/Theyashsawarkar/vesha">GitHub ↗</a></nav></div></header>
 
 <div class="wrap"><aside class="toc"></aside><article>
-<p class="n"><span class="status accepted">Accepted</span> <span style="color:var(--ov1);font:13px var(--mono)">ADR 0005 · 2026-10-21</span></p><h2 id="5-a-claude-wrapper-decides-the-account"><a class="anchor" href="#5-a-claude-wrapper-decides-the-account">#</a>5. A <code>claude</code> wrapper decides the account</h2>
+<p class="n"><span class="status accepted;">Accepted; for the active account, superseded by [ADR 9](0009-switch-by-moving-logins.md)</span> <span style="color:var(--ov1);font:13px var(--mono)">ADR 0005 · 2026-10-21</span></p><h2 id="5-a-claude-wrapper-decides-the-account"><a class="anchor" href="#5-a-claude-wrapper-decides-the-account">#</a>5. A <code>claude</code> wrapper decides the account</h2>
 <h2 id="context"><a class="anchor" href="#context">#</a>Context</h2>
 <p>Switching has to work "from anywhere, for any project": in every terminal, editor and script that runs <code>claude</code>, including ones already open. Exporting <code>CLAUDE_CONFIG_DIR</code> from a shell hook only reaches shells started afterwards, and nothing outside a shell.</p>
 <h2 id="decision"><a class="anchor" href="#decision">#</a>Decision</h2>
