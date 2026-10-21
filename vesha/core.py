@@ -621,8 +621,11 @@ def import_cswap(st, names=None):
         m = pattern.match(fname)
         email = m.group(2) if m else fname
         path = os.path.join(creds_dir, fname)
-        if email == main_email or any(a.get("email") == email for a in st["accounts"].values()):
+        if email == main_email:
             continue
+        known = next((k for k, a in st["accounts"].items() if a.get("email") == email), None)
+        if known and (st["accounts"][known].get("main") or identity(profile_dir(st, known))["signed_in"]):
+            continue   # already here, signed in
         cred = None
         raw = open(path, "rb").read()
         for decode in (lambda b: json.loads(b), lambda b: json.loads(__import__("base64").b64decode(b))):
@@ -642,8 +645,12 @@ def import_cswap(st, names=None):
                 conf = {}
         oa = conf.get("oauthAccount") if isinstance(conf, dict) else None
         org = (oa or {}).get("organizationName", "")
-        n = (names or {}).get(email) or pick_name(email, org)
-        d = new_profile(st, n)
+        if known:   # an account vesha has, whose login was lost: claude-swap still has one
+            n, d = known, profile_dir(st, known)
+            link_shared(d, config()["share_history"])
+        else:
+            n = (names or {}).get(email) or pick_name(email, org)
+            d = new_profile(st, n)
         write_private(os.path.join(d, ".credentials.json"), cred)
         base_conf = {k: v for k, v in read_profile_json(MAIN_DIR).items()
                      if k in ("hasCompletedOnboarding", "lastOnboardingVersion", "theme", "editorMode", "autoUpdates")}
@@ -653,9 +660,13 @@ def import_cswap(st, names=None):
         with open(os.path.join(d, ".claude.json"), "w") as f:
             json.dump(base_conf, f, indent=2)
         os.chmod(os.path.join(d, ".claude.json"), 0o600)
-        st["accounts"][n] = {"main": False, "email": email, "org": org, "plan": identity(d)["plan"],
-                             "added": int(time.time()), "paused": False}
-        done.append((n, email, "own profile"))
+        if known:
+            st["accounts"][n].update(org=org or st["accounts"][n].get("org", ""), plan=identity(d)["plan"])
+            done.append((n, email, "signed in again"))
+        else:
+            st["accounts"][n] = {"main": False, "email": email, "org": org, "plan": identity(d)["plan"],
+                                 "added": int(time.time()), "paused": False}
+            done.append((n, email, "own profile"))
     save(st)
     return done
 

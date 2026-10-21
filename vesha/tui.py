@@ -23,6 +23,7 @@ from . import core
 # keybind: Vesha/switcher | Ctrl+d / Ctrl+u | Scroll half a page down / up
 # keybind: Vesha/switcher | 1-9 | Jump to that account
 # keybind: Vesha/switcher | Tab | Switch between accounts and folder rules
+# keybind: Vesha/switcher | h / l | Go to the accounts / folder rules tab
 # keybind: Vesha/switcher | Enter / s | Switch to the account (make it active)
 # keybind: Vesha/switcher | r | Run claude as the account, in this folder
 # keybind: Vesha/switcher | u | Refresh usage now
@@ -53,7 +54,8 @@ FALLBACK = {"text": curses.COLOR_WHITE, "sub": curses.COLOR_WHITE, "dim": curses
             "border": curses.COLOR_WHITE}
 HELP = [
     ("Move", [("j k", "down / up (3j: three)"), ("gg G", "first / last"), ("Ctrl-d Ctrl-u", "half a page"),
-              ("1-9", "jump to that account"), ("Tab", "accounts ⇄ folders")]),
+              ("1-9", "jump to that account"), ("h l", "accounts / folders tab"),
+              ("Tab", "accounts ⇄ folders")]),
     ("Accounts", [("Enter s", "switch to it (active)"), ("r", "run claude as it, here"), ("p", "pause / resume auto"),
                   ("m", "this folder uses it"), ("a", "add (sign in)"), ("R cw", "rename"), ("dd", "remove"), ("y", "copy email")]),
     ("Sign in", [("Enter", "send the page's code"), ("Ctrl-o", "open the page again"), ("Ctrl-y", "copy the link"),
@@ -152,6 +154,9 @@ class App:
             pairs[name] = n
             curses.init_pair(n, self.cp[fg], self.cp[bgc])
             n += 1
+            pairs["cap_" + name] = n   # the rounded ends: the chip's colour on the background
+            curses.init_pair(n, self.cp[bgc], bg)
+            n += 1
         self.pairs = pairs
 
     def a(self, name, bold=False, sel=False):
@@ -215,8 +220,12 @@ class App:
         self.put(y, x + fill, "▪" * (width - fill), self.a("faint", sel=sel))
         return color
 
-    def chip(self, y, x, text, kind):
-        return self.put(y, x, f" {text} ", self.a("chip_" + kind, True)) + 1
+    def chip(self, y, x, text, kind, pair=None):
+        """A rounded capsule, like the tmux bar's."""
+        pair = pair or "chip_" + kind
+        x = self.put(y, x, "\ue0b6", self.a("cap_" + pair))
+        x = self.put(y, x, text, curses.color_pair(self.pairs[pair]) | curses.A_BOLD)
+        return self.put(y, x, "\ue0b4", self.a("cap_" + pair)) + 1
 
     def draw(self):
         self.scr.erase()
@@ -502,8 +511,8 @@ class App:
         for k, label in hints:
             if hx + len(k) + len(label) + 4 > w - 2:
                 break
-            hx = self.put(y, hx, f" {k} ", self.a("key", True))
-            hx = self.put(y, hx + 1, label, self.a("dim")) + 2
+            hx = self.chip(y, hx, k, None, "key")
+            hx = self.put(y, hx, label, self.a("dim")) + 2
 
     def draw_help(self):
         """The keys, in as many columns as the terminal fits (3, 2 or 1)."""
@@ -779,7 +788,11 @@ class App:
         elif ch == 21:   # Ctrl-u
             self.move(-max(1, (self.scr.getmaxyx()[0] - 16) // 2))
         elif ch == 9:    # Tab
-            self.focus = "folders" if self.focus == "accounts" and self.folders() else "accounts"
+            self.focus = "folders" if self.focus == "accounts" else "accounts"
+        elif k == "l" or ch == curses.KEY_RIGHT:
+            self.focus = "folders"
+        elif k == "h" or ch == curses.KEY_LEFT:
+            self.focus = "accounts"
         elif self.focus == "accounts" and (ch in (10, 13) or k == "s"):
             self.act_switch()
         elif self.focus == "accounts" and k == "r":

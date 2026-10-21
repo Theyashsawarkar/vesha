@@ -140,6 +140,7 @@ can do with it). Marks in the list: ● active, ‖ paused, ! login changed.
 | `gg` / `G` | First / last account |
 | `Ctrl+d` / `Ctrl+u` | Half a page down / up |
 | `1-9` | Jump to that account |
+| `h` / `l` | The accounts / folder rules tab |
 | `Tab` | Between accounts and folder rules |
 | `Enter` / `s` | Switch to the account |
 | `r` | Run claude as the account, in this folder, just this once |
@@ -323,6 +324,8 @@ and every login, and prints the command that fixes each problem.
 
 - **`claude` ignores the switch**: another `claude` comes first on your
   PATH. `vesha doctor` says which; put `~/.local/bin` first.
+- **An account shows "no login" but claude-swap still has it**: `vesha import
+  cswap` signs it back in from claude-swap's saved login.
 - **Two accounts show the same usage, or "login changed"**: another tool
   (claude-swap, a `/login` inside Claude Code) replaced a profile's login,
   usually `~/.claude`'s, with another account's. `vesha repair` shows what it

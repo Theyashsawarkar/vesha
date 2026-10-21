@@ -2,6 +2,16 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.2.1 -- 2026-10-21
+
+- **`vesha import cswap` restores a lost login**: an account vesha has but
+  that lost its login (e.g. after `vesha repair`) is signed back in from
+  claude-swap's saved copy.
+- **`h` / `l`** go to the accounts / folder rules tab (arrows too), and
+  `Tab` reaches the folder rules tab even when there are none yet.
+- **Rounded capsules** for the tabs, tags, mode and key hints, like the tmux bar.
+- Every switcher key is exercised end to end against a throwaway home.
+
 ## v0.2.0 -- 2026-10-21
 
 - **Sign in without leaving vesha**: `a` in the switcher asks for a name and
