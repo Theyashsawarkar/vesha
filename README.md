@@ -31,7 +31,7 @@ active account reaches its limit, vesha switches to the one with the most
 room left and tells you.
 
 <p align="center">
-  <img alt="The switcher: four accounts with their email and plan, 5-hour and weekly usage bars with time to reset, tags for the active account, the one this folder uses, paused, and running sessions; below, the selected account's details and the folder rules" src="assets/screenshots/switcher.png" width="100%">
+  <img alt="The switcher: tabs for accounts and folder rules on top; four accounts on the left with email, plan, 5-hour and weekly usage; the selected account's overview on the right with usage and reset times, login, profile, folders and what you can do" src="assets/screenshots/switcher.png" width="100%">
 </p>
 
 ## Contents
@@ -127,10 +127,12 @@ Then `vesha` opens the switcher, and `vesha switch work` or `vesha switch`
 
 ## The switcher
 
-`vesha` on its own opens it. The top shows the account a new `claude`
-would use in this folder and why; each row shows an account's email and
-plan, both limits with the time to reset, and tags: **active**, **here**
-(this folder's rule), **paused**, and how many sessions are running on it.
+`vesha` on its own opens it, laid out like
+[sangam](https://github.com/Theyashsawarkar/sangam): tabs for accounts and
+folder rules on top, with the account a new `claude` would use here; the
+accounts on the left with both limits; the selected account's overview on
+the right (usage with reset times, login, profile, folders, and what you
+can do with it). Marks in the list: ● active, ‖ paused, ! login changed.
 
 | Key | Does |
 | --- | --- |
@@ -144,13 +146,35 @@ plan, both limits with the time to reset, and tags: **active**, **here**
 | `u` | Refresh usage now |
 | `p` | Pause / resume (out of automatic switching) |
 | `m` | This folder always uses the account |
-| `a` | Add an account (sign in) |
+| `a` | Sign in a new account, right here (see below) |
 | `R` / `cw` | Rename the account |
 | `dd` | Remove the account, or the folder rule (asks first) |
 | `y` | Copy the account's email |
 | `/`, `n` / `N` | Search; next / previous match |
 | `?` | Every key |
 | `q` / `Esc` | Quit |
+
+### Signing in a new account
+
+Press `a`, give the account a name and (optionally) its email. A tab opens
+in your browser on Anthropic's sign-in page with the email filled in; enter
+the code Anthropic emails you there. If the page then shows a code, paste it
+into vesha and press Enter. The account is added and selected; `Enter`
+makes it active. vesha runs Claude Code's own sign-in for the new profile,
+so it never handles a password.
+
+| Key | Does |
+| --- | --- |
+| `Enter` | Send the code the sign-in page shows |
+| `Ctrl+o` | Open the sign-in page again |
+| `Ctrl+y` | Copy the sign-in link (to open it in another browser) |
+| `Esc` | Cancel (the half-made profile is removed) |
+
+From a shell: `vesha add work2 you@company.com`.
+
+<p align="center">
+  <img alt="Signing in from the switcher: the steps with the current one spinning, a field for the code the page shows, and the keys" src="assets/screenshots/signin.png" width="84%">
+</p>
 
 <p align="center">
   <img alt="The key sheet over the switcher: movement, account actions and other keys in columns" src="assets/screenshots/keys.png" width="84%">
@@ -171,7 +195,7 @@ Every command has `--help` with examples; `vesha help` lists them all.
 | `vesha use <name>` | This terminal only (needs the shell hook) |
 | `vesha auto on\|off` | Automatic switching at the limit |
 | `vesha pause <name>` / `resume` | Keep an account out of automatic switching |
-| `vesha add <name> [--current]` | Sign in a new account, or adopt the current one (`login` signs in again) |
+| `vesha add <name> [email] [--current]` | Sign in a new account (browser, email filled in), or adopt the current one (`login` signs in again) |
 | `vesha repair` | Fix profiles whose login another tool replaced (`fix`) |
 | `vesha remove <name>` | Forget an account and delete its profile (`rm`) |
 | `vesha rename <old> <new>` | Rename an account (`mv`) |

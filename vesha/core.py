@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 import tomllib
 import urllib.error
@@ -684,3 +685,81 @@ def uninstall_shim():
         os.remove(link)
         return link
     return None
+
+
+class SignIn:
+    """Signs a new account in: Claude Code's own `claude auth login` for a
+    fresh profile, run on a pseudo-terminal so vesha can show where it is,
+    reopen or copy its link, and type in the code the sign-in page shows.
+    You enter your email and the code Anthropic emails you on that page;
+    vesha never sees a password or code beyond the one pasted here."""
+    URL = re.compile(r"https://\S+/oauth/authorize\S+")
+    ANSI = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-B]")
+
+    def __init__(self, st, name, email=""):
+        import pty
+        self.name, self.email = name, email.strip()
+        self.dir = new_profile(st, name)
+        self.raw, self.url, self.code_sent, self.exit = b"", None, False, None
+        self.started = time.time()
+        args = [real_claude(), "auth", "login", "--claudeai"] + (["--email", self.email] if self.email else [])
+        pid, fd = pty.fork()
+        if pid == 0:   # the child: Claude Code's sign-in, in the new profile
+            os.environ["CLAUDE_CONFIG_DIR"] = self.dir
+            try:
+                os.execv(args[0], args)
+            finally:
+                os._exit(127)
+        self.pid, self.fd = pid, fd
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self):
+        while True:
+            try:
+                b = os.read(self.fd, 4096)
+            except OSError:
+                break
+            if not b:
+                break
+            self.raw += b
+            if not self.url:
+                m = self.URL.search(self.text())
+                self.url = m.group(0) if m else None
+        try:
+            _, status = os.waitpid(self.pid, 0)
+            self.exit = os.waitstatus_to_exitcode(status)
+        except ChildProcessError:
+            self.exit = 1
+
+    def text(self):
+        return self.ANSI.sub("", self.raw.decode(errors="ignore")).replace("\r", "")
+
+    def last_line(self):
+        lines = [x.strip() for x in self.text().splitlines() if x.strip() and "oauth/authorize" not in x]
+        return lines[-1] if lines else ""
+
+    @property
+    def done(self):
+        return self.exit is not None
+
+    def send_code(self, code):
+        os.write(self.fd, code.strip().encode() + b"\r")
+        self.code_sent = True
+
+    def cancel(self):
+        if not self.done:
+            try:
+                os.kill(self.pid, 15)
+            except OSError:
+                pass
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def finish(self, st):
+        """Registers the account once the sign-in has ended; raises (and removes
+        the half-made profile) if it didn't work or picked an existing account."""
+        try:
+            return register(st, self.name, self.dir)
+        except VeshaError:
+            shutil.rmtree(self.dir, ignore_errors=True)
+            raise
+

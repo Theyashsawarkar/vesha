@@ -2,6 +2,23 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.2.0 -- 2026-10-21
+
+- **Sign in without leaving vesha**: `a` in the switcher asks for a name and
+  an email, opens Anthropic's sign-in page in your browser with the email
+  filled in, and adds the account when you've entered the emailed code
+  there; if the page shows a code, paste it into vesha. `Ctrl+o` reopens
+  the page, `Ctrl+y` copies the link, `Esc` cancels and cleans up.
+  `vesha add <name> <email>` does the same from a shell; `vesha login`
+  fills in the account's email.
+- **A new look, like sangam**: a tab strip (accounts, folder rules, the
+  account a new claude uses here, auto-switching, `? keys`), the accounts in
+  a rounded pane with column headers and a marker on the selected row, and
+  an overview pane with usage, login, profile, folders and "what now".
+  Stacks into one column on narrow terminals.
+- Fixed: the last column of the screen was never drawn; `doctor` no longer
+  checks shared files of a profile that isn't made yet.
+
 ## v0.1.3 -- 2026-10-21
 
 - **`vesha repair`**: when another tool replaced a profile's login (e.g.

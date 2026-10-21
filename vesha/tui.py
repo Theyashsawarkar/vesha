@@ -4,13 +4,14 @@
   1-9       jump to that account               Tab  accounts ⇄ folder rules
   Enter s   make it the active account         r    run claude as it, here
   u         refresh usage                      p    pause / resume (auto-switching)
-  m         this folder always uses it         a    add an account
+  m         this folder always uses it         a    sign in a new account, right here
   R cw      rename                             dd   remove (asks)
   y         copy the email                     /    filter, n N next / previous
   ?         all keys                           q Esc quit
 """
 import curses
 import os
+import re
 import subprocess
 import threading
 import time
@@ -34,22 +35,29 @@ from . import core
 # keybind: Vesha/switcher | / | Search accounts (n / N: next / previous match)
 # keybind: Vesha/switcher | ? | Show all keys
 # keybind: Vesha/switcher | q / Esc | Quit the switcher
+# keybind: Vesha/sign-in | Enter | Send the code the sign-in page shows
+# keybind: Vesha/sign-in | Ctrl+o | Open the sign-in page again
+# keybind: Vesha/sign-in | Ctrl+y | Copy the sign-in link
+# keybind: Vesha/sign-in | Esc | Cancel the sign-in
 
 PALETTE = {  # Catppuccin Mocha, as curses colour numbers 16+
     "text": (205, 214, 244), "sub": (166, 173, 200), "dim": (127, 132, 156), "faint": (69, 71, 90),
     "peach": (250, 179, 135), "green": (166, 227, 161), "red": (243, 139, 168), "yellow": (249, 226, 175),
     "sky": (137, 220, 235), "mauve": (203, 166, 247), "lav": (180, 190, 254), "crust": (17, 17, 27),
-    "selbg": (60, 48, 50), "surface": (49, 50, 68),
+    "selbg": (42, 43, 60), "surface": (49, 50, 68), "rose": (235, 160, 172), "border": (88, 91, 112),
 }
 FALLBACK = {"text": curses.COLOR_WHITE, "sub": curses.COLOR_WHITE, "dim": curses.COLOR_WHITE, "faint": curses.COLOR_BLACK,
             "peach": curses.COLOR_YELLOW, "green": curses.COLOR_GREEN, "red": curses.COLOR_RED, "yellow": curses.COLOR_YELLOW,
             "sky": curses.COLOR_CYAN, "mauve": curses.COLOR_MAGENTA, "lav": curses.COLOR_BLUE, "crust": curses.COLOR_BLACK,
-            "selbg": curses.COLOR_BLACK, "surface": curses.COLOR_BLACK}
+            "selbg": curses.COLOR_BLACK, "surface": curses.COLOR_BLACK, "rose": curses.COLOR_RED,
+            "border": curses.COLOR_WHITE}
 HELP = [
     ("Move", [("j k", "down / up (3j: three)"), ("gg G", "first / last"), ("Ctrl-d Ctrl-u", "half a page"),
               ("1-9", "jump to that account"), ("Tab", "accounts ⇄ folders")]),
     ("Accounts", [("Enter s", "switch to it (active)"), ("r", "run claude as it, here"), ("p", "pause / resume auto"),
                   ("m", "this folder uses it"), ("a", "add (sign in)"), ("R cw", "rename"), ("dd", "remove"), ("y", "copy email")]),
+    ("Sign in", [("Enter", "send the page's code"), ("Ctrl-o", "open the page again"), ("Ctrl-y", "copy the link"),
+                           ("Esc", "cancel")]),
     ("Other", [("u", "refresh usage"), ("/ n N", "search, next, previous"), ("dd", "remove a folder rule (Folders)"),
                ("?", "this help"), ("q Esc", "quit")]),
 ]
@@ -73,6 +81,9 @@ class App:
         self.input = None   # (prompt, buffer, callback)
         self.confirm = None   # (question, callback)
         self.help = False
+        self.signin = None   # a core.SignIn while an account signs in
+        self.code_buf = ""
+        self.problems, self.running = {}, {}
         self.frame = 0
         self.cwd = os.getcwd()
         self.after = None   # an action to run after leaving curses
@@ -131,7 +142,7 @@ class App:
             pairs[fg] = n
             curses.init_pair(n, self.cp[fg], bg)
             n += 1
-        for fg in ("text", "peach", "sub", "dim", "green", "red", "sky", "lav", "yellow", "faint"):
+        for fg in ("text", "peach", "sub", "dim", "green", "red", "sky", "lav", "yellow", "faint", "rose"):
             pairs["sel_" + fg] = n
             curses.init_pair(n, self.cp[fg], self.cp["selbg"])
             n += 1
@@ -152,28 +163,56 @@ class App:
         h, w = self.scr.getmaxyx()
         if y < 0 or y >= h or x >= w:
             return x
-        text = str(text)[: max(0, w - x - 1)]
+        text = str(text)[: max(0, w - x)]
         try:
             self.scr.addstr(y, x, text, attr)
         except curses.error:
-            pass
+            pass   # writing the bottom-right cell moves the cursor off-screen: harmless
         return x + len(text)
 
-    def rule(self, y, title, right=""):
-        h, w = self.scr.getmaxyx()
-        x = self.put(y, 1, "━━ ", self.a("peach"))
-        x = self.put(y, x, title, self.a("text", True))
-        line_end = w - 3 - len(right)
-        self.put(y, x + 1, "─" * max(0, line_end - x - 2), self.a("faint"))
+    def box(self, y, x, h, w, title=(), right=()):
+        """A rounded box like sangam's panes; title and right are [(text, colour)]."""
+        if h < 2 or w < 4:
+            return
+        b = self.a("border")
+        self.put(y, x, "╭" + "─" * (w - 2) + "╮", b)
+        for i in range(1, h - 1):
+            self.put(y + i, x, "│", b)
+            self.put(y + i, x + w - 1, "│", b)
+        self.put(y + h - 1, x, "╰" + "─" * (w - 2) + "╯", b)
+        tx = x + 2
+        if title:
+            tx = self.put(y, tx, " ", b)
+            for text, color in title:
+                tx = self.put(y, tx, text, self.a(color, color in ("text", "rose", "yellow")))
+            self.put(y, tx, " ", b)
         if right:
-            self.put(y, w - 2 - len(right), right, self.a("dim"))
+            width = sum(len(t) for t, _ in right) + 2
+            rx = self.put(y, x + w - 2 - width, " ", b)
+            for text, color in right:
+                rx = self.put(y, rx, text, self.a(color, color in ("text", "rose", "yellow")))
+            self.put(y, rx, " ", b)
 
-    def bar(self, y, x, pct, width, sel):
+    def wrap(self, y, x, w, text, attr):
+        """Writes text word-wrapped to w columns; returns the next free row."""
+        import textwrap
+        for line in textwrap.wrap(text, max(10, w)) or [""]:
+            self.put(y, x, line, attr)
+            y += 1
+        return y
+
+    def section(self, y, x, w, title):
+        """── title ────── inside a pane."""
+        x2 = self.put(y, x, "── ", self.a("faint"))
+        x2 = self.put(y, x2, title, self.a("dim"))
+        self.put(y, x2 + 1, "─" * max(0, x + w - x2 - 2), self.a("faint"))
+
+    def bar(self, y, x, pct, width, sel=False):
         pct = max(0, min(100, pct))
         fill = round(width * pct / 100)
         color = "red" if pct >= core.config()["warn_at"] else "peach" if pct >= 60 else "green"
-        self.put(y, x, "━" * fill, self.a(color, sel=sel))
-        self.put(y, x + fill, "━" * (width - fill), self.a("faint", sel=sel))
+        self.put(y, x, "▪" * fill, self.a(color, sel=sel))
+        self.put(y, x + fill, "▪" * (width - fill), self.a("faint", sel=sel))
         return color
 
     def chip(self, y, x, text, kind):
@@ -182,159 +221,259 @@ class App:
     def draw(self):
         self.scr.erase()
         h, w = self.scr.getmaxyx()
-        if h < 14 or w < 70:
-            self.put(0, 0, "vesha needs a bigger window (70×14)", self.a("yellow", True))
+        if h < 16 or w < 72:
+            self.put(0, 0, "vesha needs a bigger window (72×16)", self.a("yellow", True))
             self.scr.refresh()
             return
-        here, why = core.resolve(self.st, self.cwd)
-        # header
-        x = self.put(0, 1, "❯ ", self.a("peach", True))
-        x = self.put(0, x, "vesha", self.a("text", True))
-        x = self.put(0, x + 1, "वेष", self.a("peach"))
-        right = f"new claude here → {here or '–'}  ({why})"
-        if x + 24 < w - len(right) - 2:
-            self.put(0, x + 2, "Claude Code accounts", self.a("dim"))
-        self.put(0, w - len(right) - 2, "new claude here → ", self.a("dim"))
-        self.put(0, w - len(right) - 2 + 18, here or "–", self.a("peach", True))
-        self.put(0, w - len(right) - 2 + 18 + len(here or "–"), f"  ({why})", self.a("dim"))
-        spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[self.frame % 10] + " checking usage" if self.loading else ""
+        self.problems = core.login_problems(self.st)
+        self.running = core.running_profiles()
+        self.draw_tabs(w)
+        top, bottom = 3, h - 2   # panes between the tab strip and the status line
         names = self.names()
-        self.rule(2, "Accounts", spin or f"{len(names)} account{'s' if len(names) != 1 else ''}")
-        y = 3
-        running = core.running_profiles()
-        list_h = max(3, min(len(names), h - 16))
-        top = max(0, self.sel["accounts"] - list_h + 1)
-        if not names:
-            self.put(y + 1, 4, "No accounts yet.", self.a("text", True))
-            hint = "a  add one (sign in)   ·   or quit and run: vesha import cswap  /  vesha add <name> --current"
-            self.put(y + 2, 4, hint, self.a("dim"))
-        name_w = max(14, max([len(x) for x in names] + [0]) + 2)
-        infos = {n: f"{self.st['accounts'][n].get('email') or '–'} · {self.st['accounts'][n].get('plan') or '–'}" for n in names}
-        info_w = max([len(x) for x in infos.values()] + [10])
-        problems = core.login_problems(self.st)
-        rows = []
-        for n in names[top: top + list_h]:
-            acc = self.st["accounts"][n]
-            tags = [("login changed", "red")] if problems.get(n) else []
-            if n == self.st["default"]:
-                tags.append(("active", "peach"))
-            if n == here and n != self.st["default"]:
-                tags.append(("here", "sky"))
-            if acc.get("paused"):
-                tags.append(("paused", "dim"))
-            live = running.get(os.path.realpath(core.profile_dir(self.st, n)), 0)
-            if live:
-                tags.append((f"{live} running", "green"))
-            rows.append(tags)
-        # one tag column for every row, so the bars line up; the bars share what's left
-        tags_x = w - 3 - max([sum(len(t) + 3 for t, _ in tags) for tags in rows] + [0])
-        # the info column gives way (down to 18 wide) before the weekly bar does
-        info_w = max(min(info_w, 18), min(info_w, tags_x - 9 - name_w - 2 - 2 * (17 + 6)))
-        col_use = 9 + name_w + info_w + 2
-        if tags_x - col_use < 23:   # narrow: the info column shrinks, then hides, before anything overlaps
-            info_w -= 23 - (tags_x - col_use)
-            info_w = info_w if info_w >= 8 else -2
-            col_use = 9 + name_w + info_w + 2
-        room = tags_x - col_use
-        windows = 2 if (room - 34) // 2 >= 6 else 1   # the 5-hour window first: it matters most
-        bw = max(6, min(18, (room - 17 * windows) // windows))
-        for i, n in enumerate(names[top: top + list_h], start=top):
-            acc = self.st["accounts"][n]
-            sel = self.focus == "accounts" and i == self.sel["accounts"]
-            if sel:
-                self.put(y, 1, " " * (w - 3), self.a("text", sel=True))
-            hit = self.filter and self.filter.lower() in f"{n} {acc.get('email', '')}".lower()
-            self.put(y, 2, "❯" if sel else (str(i + 1) if i < 9 else " "), self.a("peach" if sel else "faint", True, sel))
-            self.put(y, 4, f" {n[0].upper()} ", self.a("chip_" + ("peach" if n == self.st["default"] else "dim"), True))
-            self.put(y, 9, n, self.a("yellow" if hit else "text", True, sel))
-            info = infos[n]
-            if info_w > 0:
-                self.put(y, 9 + name_w, info if len(info) <= info_w else info[: info_w - 1] + "…", self.a("dim", sel=sel))
-            tags = rows[i - top]
-            u = self.use.get(n)
-            ux = col_use
-            if isinstance(u, dict):
-                for key, label in (("five_hour", "5h"), ("seven_day", "wk"))[:windows]:
-                    if key in u:
-                        p = u[key]["pct"]
-                        rel, _ = core.resets_in(u[key].get("resets_at"))
-                        self.put(y, ux, label, self.a("dim", sel=sel))
-                        color = self.bar(y, ux + 3, p, bw, sel)
-                        self.put(y, ux + 4 + bw, f"{p:>3}%", self.a(color, True, sel))
-                        self.put(y, ux + 9 + bw, rel[:7], self.a("dim", sel=sel))
-                    ux += bw + 18
-            elif u is not None:
-                self.put(y, ux, str(u)[:40], self.a("yellow", sel=sel))
-            else:
-                self.put(y, ux, "…", self.a("faint"))
-            tx = w - 2
-            for t, k in reversed(tags):
-                tx -= len(t) + 3
-                self.chip(y, tx, t, k)
-            y += 1
-        # details of the selected account
-        y += 1
-        cur = self.current()
-        if cur:
-            acc = self.st["accounts"][cur]
-            d = core.profile_dir(self.st, cur)
-            who = core.identity(d)
-            exp = who["login_expires"]
-            login = "signed in" if who["signed_in"] else "signed out: a to sign in again"
-            if who["signed_in"] and exp:
-                days = int((exp - time.time()) / 86400)
-                login += f" · login good for {days} more day{'s' if days != 1 else ''}"
-            folders = [f.replace(core.HOME, "~", 1) for f, n in self.folders() if n == cur]
-            for i, p in enumerate(problems.get(cur, [])[:2]):
-                self.put(y + i, 3, ("! " + p + " (vesha repair)")[: w - 6], self.a("red", True))
-            y += len(problems.get(cur, [])[:2]) + (1 if problems.get(cur) else 0)
-            facts = [("account", " · ".join(x for x in (acc.get("email"), acc.get("plan"), acc.get("org")) if x) or "–", "sub"),
-                     ("login", login, "green" if who["signed_in"] else "red"),
-                     ("profile", d.replace(core.HOME, "~") + ("  (Claude Code's own)" if d == core.MAIN_DIR else ""), "sub"),
-                     ("folders", ", ".join(folders) or "none (follows the active account)", "sky" if folders else "dim")]
-            two = w >= 140
-            for i, (k, v, color) in enumerate(facts):
-                fy = y + (i // 2 if two else i)
-                fx = (3 if i % 2 == 0 else w // 2) if two else 3
-                self.put(fy, fx, k + " ", self.a("dim"))
-                self.put(fy, fx + len(k) + 1, v[: (w // 2 - fx - len(k) - 3) if two and i % 2 == 0 else w], self.a(color))
-            y += 1 if two else 3
-            u = self.use.get(cur)
-            if isinstance(u, dict) and "five_hour" in u:
-                rel5, c5 = core.resets_in(u["five_hour"].get("resets_at"))
-                relw, cw = core.resets_in(u.get("seven_day", {}).get("resets_at"))
-                txt = f"5-hour resets {c5} (in {rel5})" + (f"   ·   week resets {cw} (in {relw})" if relw else "")
-                self.put(y + 2, 3, "resets ", self.a("dim"))
-                self.put(y + 2, 10, txt + ("   (last known numbers)" if u.get("stale") else ""), self.a("sub"))
-        # folder rules
-        y += 4
-        conf = core.config()
-        auto = f"auto-switch {'on' if conf['auto'] else 'off'} at {conf['switch_at']}%"
-        self.rule(y, "Folders", auto)
-        y += 1
-        rules = self.folders()
-        if not rules:
-            self.put(y, 3, "No folder rules: every folder uses the active account.", self.a("dim"))
-            self.put(y + 1, 3, "m on an account makes this folder always use it.", self.a("faint"))
-        for i, (f, n) in enumerate(rules[: max(1, h - y - 3)]):
-            sel = self.focus == "folders" and i == self.sel["folders"]
-            if sel:
-                self.put(y, 1, " " * (w - 3), self.a("text", sel=True))
-            self.put(y, 2, "❯" if sel else " ", self.a("peach", True, sel))
-            f = "~" + f[len(core.HOME):] if f == core.HOME or f.startswith(core.HOME + "/") else f
-            self.put(y, 4, f, self.a("sky", sel=sel))
-            self.put(y, max(36, len(f) + 6), "→ ", self.a("dim", sel=sel))
-            self.put(y, max(38, len(f) + 8), n, self.a("text", True, sel))
-            y += 1
+        if w >= 120:
+            lw = max(64, min(w * 62 // 100, w - 50))
+            self.draw_list(top, 0, bottom - top + 1, lw)
+            self.draw_side(top, lw + 1, bottom - top + 1, w - lw - 1)
+        else:   # narrow: the list on top, the details under it
+            lh = min(max(len(names) if self.focus == "accounts" else len(self.folders()), 1) + 4, (bottom - top + 1) // 2)
+            self.draw_list(top, 0, lh, w)
+            self.draw_side(top + lh, 0, bottom - top + 1 - lh, w)
         self.statusline()
         if self.help:
             self.draw_help()
         self.scr.refresh()
 
+    def draw_tabs(self, w):
+        here, why = core.resolve(self.st, self.cwd)
+        self.box(0, 0, 3, w)
+        x = self.put(1, 2, "vesha", self.a("rose", True))
+        x = self.put(1, x + 1, "वेष", self.a("dim")) + 3
+        for tab, n in (("accounts", len(self.names())), ("folders", len(self.folders()))):
+            label = f"{tab.capitalize()}  {n}"
+            if self.focus == tab and not self.signin:
+                x = self.chip(1, x, label, "yellow") + 2
+            else:
+                x = self.put(1, x + 1, tab.capitalize(), self.a("sub"))
+                x = self.put(1, x + 2, str(n), self.a("dim")) + 3
+        if self.signin:
+            x = self.chip(1, x, f"Sign in  {self.signin.name}", "green") + 2
+        conf = core.config()
+        right = [("new claude here → ", "dim"), (here or "–", "peach"), (f"  ({why})", "dim"),
+                 ("   auto " + ("on" if conf["auto"] else "off"), "green" if conf["auto"] else "red"),
+                 ("   ? keys", "dim")]
+        width = sum(len(t) for t, _ in right)
+        if width + x + 2 > w - 2:   # too narrow: keep what matters
+            right = [(here or "–", "peach"), ("   ? keys", "dim")]
+            width = sum(len(t) for t, _ in right)
+        rx = w - 2 - width
+        for text, color in right:
+            rx = self.put(1, rx, text, self.a(color, color == "peach"))
+
+    # ---- left pane: accounts or folder rules
+    def draw_list(self, y, x, h, w):
+        if self.focus == "folders":
+            return self.draw_folders(y, x, h, w)
+        names = self.names()
+        spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[self.frame % 10] + " checking usage" if self.loading else ""
+        self.box(y, x, h, w, [("◉ ", "rose"), ("accounts", "rose"), (f" · active {self.st['default'] or '–'} · {len(names)}", "dim")],
+                 [(spin, "dim")] if spin else ())
+        if not names:
+            self.put(y + 2, x + 3, "No accounts yet.", self.a("text", True))
+            self.put(y + 3, x + 3, "a  sign one in   ·   or: vesha import cswap   ·   vesha add <name> --current", self.a("dim"))
+            return
+        inner = w - 4
+        week = inner >= 64
+        name_w = max(10, min(16, max(len(n) for n in names) + 1))
+        use_w = 13   # "▪▪▪▪▪▪ 100%"
+        email_w = max(8, inner - 6 - name_w - 10 - use_w * (2 if week else 1) - 1)
+        cx = {"i": x + 3, "name": x + 8, "email": x + 8 + name_w, "plan": x + 8 + name_w + email_w + 1}
+        cx["h5"] = cx["plan"] + 10
+        cx["wk"] = cx["h5"] + use_w + 1
+        hy = y + 1
+        for key, label in (("i", "#"), ("name", "account"), ("email", "email"), ("plan", "plan"), ("h5", "5 hours")) + \
+                (("wk", "week"),) * week:
+            self.put(hy, cx[key], label, self.a("dim"))
+        self.put(hy + 1, x + 1, "─" * (w - 2), self.a("faint"))
+        rows = h - 4
+        top = max(0, self.sel["accounts"] - rows + 1)
+        for row, n in enumerate(names[top: top + rows]):
+            i = top + row
+            ry = y + 3 + row
+            acc = self.st["accounts"][n]
+            sel = i == self.sel["accounts"]
+            if sel:
+                self.put(ry, x + 2, " " * (w - 4), self.a("text", sel=True))
+                self.put(ry, x + 1, "▌", self.a("rose", True))
+            hit = self.filter and self.filter.lower() in f"{n} {acc.get('email', '')}".lower()
+            self.put(ry, cx["i"], str(i + 1) if i < 9 else " ", self.a("yellow" if not sel else "yellow", True, sel))
+            mark, mcol = ("!", "red") if self.problems.get(n) else ("●", "peach") if n == self.st["default"] else \
+                ("‖", "dim") if acc.get("paused") else (" ", "dim")
+            self.put(ry, cx["name"] - 3, mark, self.a(mcol, True, sel))
+            self.put(ry, cx["name"], n[: name_w - 1], self.a("yellow" if hit else "text", sel or n == self.st["default"], sel))
+            email = acc.get("email") or "–"
+            self.put(ry, cx["email"], email if len(email) < email_w else email[: email_w - 2] + "…", self.a("sub", sel=sel))
+            self.put(ry, cx["plan"], (acc.get("plan") or "–")[:9], self.a("dim", sel=sel))
+            u = self.use.get(n)
+            if isinstance(u, dict):
+                for key in ("five_hour", "seven_day")[: 2 if week else 1]:
+                    if key in u:
+                        col = cx["h5" if key == "five_hour" else "wk"]
+                        p = u[key]["pct"]
+                        color = self.bar(ry, col, p, 6, sel)
+                        self.put(ry, col + 7, f"{p:>3}%", self.a(color, True, sel))
+            elif u is not None:
+                self.put(ry, cx["h5"], ("no login" if "sign" in str(u) or "login" in str(u) else "couldn't check")[: use_w * 2],
+                         self.a("yellow", sel=sel))
+            else:
+                self.put(ry, cx["h5"], "…", self.a("faint", sel=sel))
+
+    def draw_folders(self, y, x, h, w):
+        rules = self.folders()
+        self.box(y, x, h, w, [("◉ ", "rose"), ("folder rules", "rose"), (f" · {len(rules)}", "dim")])
+        if not rules:
+            self.put(y + 2, x + 3, "No folder rules: every folder uses the active account.", self.a("dim"))
+            self.put(y + 3, x + 3, "m on an account makes this folder always use it.", self.a("faint"))
+            return
+        self.put(y + 1, x + 3, "folder (and everything under it)", self.a("dim"))
+        self.put(y + 1, x + w - 18, "account", self.a("dim"))
+        self.put(y + 2, x + 1, "─" * (w - 2), self.a("faint"))
+        for i, (f, n) in enumerate(rules[: h - 4]):
+            ry = y + 3 + i
+            sel = i == self.sel["folders"]
+            if sel:
+                self.put(ry, x + 2, " " * (w - 4), self.a("text", sel=True))
+                self.put(ry, x + 1, "▌", self.a("rose", True))
+            f = "~" + f[len(core.HOME):] if f == core.HOME or f.startswith(core.HOME + "/") else f
+            self.put(ry, x + 3, f[: w - 24], self.a("sky", sel=sel))
+            self.put(ry, x + w - 18, n, self.a("text", True, sel))
+
+    # ---- right pane: the selected account, or the sign-in
+    def draw_side(self, y, x, h, w):
+        if self.signin:
+            return self.draw_signin(y, x, h, w)
+        n = self.current() if self.focus == "accounts" else (self.folders()[self.sel["folders"]][1] if self.folders() else None)
+        if not n or n not in self.st["accounts"]:
+            self.box(y, x, h, w)
+            return
+        acc = self.st["accounts"][n]
+        self.box(y, x, h, w, [(n, "rose"), (" · overview", "dim")])
+        lx, iw = x + 2, w - 4
+        cy = y + 1
+        cx = self.put(cy, lx, n, self.a("text", True)) + 2
+        live = self.running.get(os.path.realpath(core.profile_dir(self.st, n)), 0)
+        for show, label, kind in ((n == self.st["default"], "ACTIVE", "peach"), (acc.get("paused"), "PAUSED", "dim"),
+                                  (self.problems.get(n), "LOGIN CHANGED", "red"), (live, f"{live} RUNNING", "green")):
+            if show:
+                cx = self.chip(cy, cx, label, kind) + 1
+        cy += 1
+        self.put(cy, lx, " · ".join(v for v in (acc.get("email"), acc.get("plan"), acc.get("org")) if v)[:iw], self.a("sub"))
+        cy += 1
+        for p in self.problems.get(n, [])[:2]:
+            self.put(cy, lx, ("! " + p)[:iw], self.a("red", True))
+            cy += 1
+        if cy < y + h - 2:
+            cy += 1
+            self.section(cy, lx, iw, "usage")
+            cy += 1
+            u = self.use.get(n)
+            if isinstance(u, dict):
+                bw = max(6, min(16, iw - 44))
+                for key, label in (("five_hour", "5 hours"), ("seven_day", "week")):
+                    if key in u:
+                        p = u[key]["pct"]
+                        rel, clock = core.resets_in(u[key].get("resets_at"))
+                        self.put(cy, lx, label, self.a("dim"))
+                        color = self.bar(cy, lx + 9, p, bw)
+                        ex = self.put(cy, lx + 10 + bw, f"{p:>3}%", self.a(color, True))
+                        reset = f"resets {clock}" + (f" (in {rel})" if rel else "")
+                        if ex + 2 + len(reset) > lx + iw:
+                            reset = f"in {rel}" if rel else clock
+                        self.put(cy, ex + 2, reset[: max(0, lx + iw - ex - 2)], self.a("dim"))
+                        cy += 1
+                if u.get("stale"):
+                    self.put(cy, lx, "last known numbers", self.a("faint"))
+                    cy += 1
+            else:
+                self.put(cy, lx, str(u) if u is not None else "checking…", self.a("yellow" if u is not None else "faint"))
+                cy += 1
+        d = core.profile_dir(self.st, n)
+        who = core.identity(d)
+        exp = who["login_expires"]
+        login = ("✓ signed in" + (f" · good for {int((exp - time.time()) / 86400)} more days" if exp else "")) \
+            if who["signed_in"] else f"✗ signed out: vesha login {n}"
+        folders = [f.replace(core.HOME, "~", 1) for f, m in self.folders() if m == n]
+        facts = [("login", login, "green" if who["signed_in"] else "red"),
+                 ("profile", d.replace(core.HOME, "~") + ("  (Claude Code's own)" if d == core.MAIN_DIR else ""), "sub"),
+                 ("folders", ", ".join(folders) or "none: follows the active account", "sky" if folders else "dim")]
+        if cy + 5 < y + h - 1:
+            cy += 1
+            self.section(cy, lx, iw, "account")
+            cy += 1
+            for k, v, color in facts:
+                self.put(cy, lx, k, self.a("dim"))
+                self.put(cy, lx + 9, v[: iw - 9], self.a(color))
+                cy += 1
+        what = [("Enter", "switch to it" if n != self.st["default"] else "(already active)"), ("r", "run claude as it, here"),
+                ("p", "resume" if acc.get("paused") else "pause (no auto-switching to it)"), ("m", "this folder always uses it"),
+                ("R", "rename"), ("dd", "remove")]
+        if self.problems.get(n):
+            what.insert(0, ("", "fix: quit and run vesha repair"))
+        if cy + len(what) + 2 < y + h - 1:
+            cy += 1
+            self.section(cy, lx, iw, "what now")
+            cy += 1
+            for k, d2 in what:
+                self.put(cy, lx, k, self.a("rose", True))
+                self.put(cy, lx + 7, d2[: iw - 7], self.a("text" if k else "red"))
+                cy += 1
+
+    def draw_signin(self, y, x, h, w):
+        si = self.signin
+        self.box(y, x, h, w, [("sign in", "rose"), (f" · {si.name}", "dim")])
+        lx, iw = x + 2, w - 4
+        cy = y + 1
+        cx = self.put(cy, lx, "Sign in", self.a("rose", True))
+        self.put(cy, cx + 2, si.name, self.a("text", True))
+        cy += 1
+        cy = self.wrap(cy + 0, lx, iw, (f"as {si.email}, " if si.email else "") + "on Anthropic's sign-in page in your browser",
+                       self.a("sub")) + 1
+        self.section(cy, lx, iw, "steps")
+        cy += 1
+        spin = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[self.frame % 10]
+        steps = [(bool(si.url), "a tab opened in your browser" + (" (email filled in)" if si.email else "")),
+                 (si.code_sent, "there, enter your email and the code Anthropic emails you"),
+                 (si.code_sent, "if the page then shows a code, paste it below and press Enter"),
+                 (si.done, "vesha adds the account")]
+        current = next((i for i, (ok, _) in enumerate(steps) if not ok), len(steps))
+        for i, (ok, text) in enumerate(steps):
+            mark, color = ("✓", "green") if ok else (spin, "peach") if i == current else ("·", "faint")
+            self.put(cy, lx, mark, self.a(color, True))
+            cy = self.wrap(cy, lx + 2, iw - 2, text, self.a("text" if i <= current else "dim"))
+        cy += 1
+        self.section(cy, lx, iw, "code from the page (optional)")
+        cy += 1
+        bx = self.put(cy, lx, "❯ ", self.a("rose", True))
+        bx = self.put(cy, bx, self.code_buf[-(iw - 4):], self.a("text", True))
+        self.put(cy, bx, "▏", self.a("peach", True))
+        cy += 2
+        self.section(cy, lx, iw, "what now")
+        cy += 1
+        for k, d in (("Enter", "send the pasted code"), ("Ctrl+o", "open the sign-in page again"),
+                     ("Ctrl+y", "copy the sign-in link"), ("Esc", "cancel")):
+            if cy >= y + h - 2:
+                break
+            self.put(cy, lx, k, self.a("rose", True))
+            self.put(cy, lx + 8, d, self.a("text"))
+            cy += 1
+        last = si.last_line()
+        if last and y + h - 2 > cy:
+            self.put(y + h - 2, lx, ("claude: " + last)[:iw], self.a("faint"))
+
     def statusline(self):
         h, w = self.scr.getmaxyx()
         y = h - 1
-        mode_kind = {"NORMAL": "peach", "FILTER": "sky", "CONFIRM": "red", "RENAME": "yellow", "ADD": "green"}[self.mode]
+        mode_kind = {"NORMAL": "peach", "FILTER": "sky", "CONFIRM": "red", "RENAME": "yellow", "ADD": "green",
+                     "SIGN IN": "green"}[self.mode]
         x = self.chip(y, 1, self.mode, mode_kind)
         if self.input:
             prompt, buf, _ = self.input
@@ -350,12 +489,15 @@ class App:
         if self.toast_msg and time.time() - self.toast_at < 3.5:
             self.put(y, x + 2, self.toast_msg, self.a({"ok": "green", "warn": "yellow", "err": "red"}[self.toast_kind]))
             return
-        if self.focus == "accounts":
+        if self.signin:
+            hints = [("Enter", "send code"), ("Ctrl+o", "open page"), ("Ctrl+y", "copy link"), ("Esc", "cancel")]
+        elif self.focus == "accounts":
             hints = [("Enter", "switch"), ("r", "run here"), ("u", "usage"), ("p", "pause"), ("m", "map folder"),
                      ("a", "add"), ("dd", "remove")]
         else:
             hints = [("dd", "remove rule"), ("Tab", "accounts")]
-        hints += [("?", "keys"), ("q", "quit")]
+        if not self.signin:
+            hints += [("?", "keys"), ("q", "quit")]
         hx = x + 2
         for k, label in hints:
             if hx + len(k) + len(label) + 4 > w - 2:
@@ -481,15 +623,75 @@ class App:
         self.prompt("RENAME", f"rename {n} to: ", n, done)
 
     def act_add(self):
-        def done(name):
-            name = name.strip()
+        def got_email(name, email):
+            email = email.strip()
+            if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                self.toast(f"“{email}” isn't an email address", "err")
+                return
             try:
-                core.check_name(name)
+                self.signin = core.SignIn(self.st, name, email)
             except core.VeshaError as e:
                 self.toast(str(e), "err")
                 return
-            self.after = ("add", name)
-        self.prompt("ADD", "name for the new account: ", "", done)
+            self.code_buf, self.mode = "", "SIGN IN"
+
+        def got_name(name):
+            name = name.strip()
+            try:
+                core.check_name(name)
+                if name in self.st["accounts"]:
+                    raise core.VeshaError(f"there's already an account called {name}")
+            except core.VeshaError as e:
+                self.toast(str(e), "err")
+                return
+            self.prompt("ADD", f"{name}'s email (Enter to type it in the browser instead): ", "", lambda e: got_email(name, e))
+        self.prompt("ADD", "name for the new account (e.g. work, client-x): ", "", got_name)
+
+    def signin_key(self, ch):
+        si = self.signin
+        if ch == 27:
+            si.cancel()
+            self.signin, self.mode = None, "NORMAL"
+            self.toast("sign-in cancelled", "warn")
+        elif ch in (10, 13):
+            if self.code_buf.strip():
+                si.send_code(self.code_buf)
+                self.code_buf = ""
+        elif ch == 15:   # Ctrl-o
+            if si.url:
+                subprocess.Popen(["xdg-open", si.url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.toast("opened the sign-in page")
+        elif ch == 25:   # Ctrl-y
+            if si.url:
+                try:
+                    subprocess.run(["wl-copy"], input=si.url, text=True, timeout=3)
+                    self.toast("copied the sign-in link")
+                except (OSError, subprocess.TimeoutExpired):
+                    self.toast("couldn't copy (no wl-copy)", "err")
+        elif ch in (curses.KEY_BACKSPACE, 127, 8):
+            self.code_buf = self.code_buf[:-1]
+        elif ch == 21:   # Ctrl-u
+            self.code_buf = ""
+        elif 32 <= ch < 0x110000:
+            self.code_buf += chr(ch)
+        return True
+
+    def signin_poll(self):
+        si = self.signin
+        if not si or not si.done:
+            return
+        self.signin, self.mode = None, "NORMAL"
+        try:
+            who = si.finish(self.st)
+        except core.VeshaError as e:
+            self.toast(f"✗ {si.name} wasn't added: {e}", "err")
+            return
+        self.st = core.load()
+        self.focus = "accounts"
+        if si.name in self.names():
+            self.sel["accounts"] = self.names().index(si.name)
+        self.toast(f"✓ {si.name} signed in ({who['email']}, {who['plan']}): Enter makes it active")
+        self.refresh_usage(True)
 
     def ask(self, question, cb):
         self.mode = "CONFIRM"
@@ -506,6 +708,8 @@ class App:
             self.sel[self.focus] = max(0, min(size - 1, self.sel[self.focus] + delta))
 
     def key(self, ch):
+        if self.signin and not self.input:
+            return self.signin_key(ch)
         if self.help:
             if ch in (ord("?"), 27, ord("q")):
                 self.help = False
@@ -640,6 +844,7 @@ class App:
             if self.count and time.time() - self.count_at > 0.6:   # a lone number: jump to that account
                 self.jump_to(int(self.count))
                 self.count = ""
+            self.signin_poll()
             self.draw()
             try:
                 ch = self.scr.get_wch()
@@ -675,11 +880,3 @@ def run():
         if what == "run":
             from .cli import exec_claude
             exec_claude([], arg)   # replaces this process
-        if what == "add":
-            from .cli import Ctx, cmd_add
-            try:
-                cmd_add(Ctx([arg]))
-            except core.VeshaError as e:
-                from . import ui
-                ui.err(str(e))
-            input("\nPress Enter to go back to the switcher… ")

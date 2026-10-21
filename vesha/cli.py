@@ -42,12 +42,14 @@ COMMANDS = {
                   summary="Keep an account out of automatic switching", examples=["vesha pause client-x"]),
     "resume": dict(group="Limits", aliases=[], args="<account>",
                    summary="Let a paused account be picked again", examples=["vesha resume client-x"]),
-    "add": dict(group="Accounts", aliases=["login"], args="<name> [--current]",
+    "add": dict(group="Accounts", aliases=["login"], args="<name> [email] [--current]",
                 summary="Sign in a new account (or the one already in ~/.claude with --current)",
-                description="Opens Claude Code's sign-in for a fresh profile, then names it. `--current` adds the account "
+                description="Opens Claude Code's sign-in in your browser for a fresh profile, with the email filled in "
+                            "when you give one: enter the code Anthropic emails you there, and the account is added. In "
+                            "the switcher, a does the same without leaving it. `--current` adds the account "
                             "Claude Code is already signed in to, in place. `vesha login <name>` signs an existing account "
                             "in again after its login expired.",
-                examples=["vesha add personal", "vesha add work --current"]),
+                examples=["vesha add work2 you@company.com", "vesha add personal --current", "vesha login personal"]),
     "repair": dict(group="Accounts", aliases=["fix"], args="[-y]",
                    summary="Fix profiles whose login another tool replaced (claude-swap, a /login)",
                    description="When ~/.claude ends up holding another account's login (claude-swap switched it, or a "
@@ -434,12 +436,13 @@ def cmd_add(ctx):
         who = core.adopt_main(st, name)
         ui.ok(f"added {c(name, 'peach', bold=True)} {c('(' + who['email'] + ', the login already in ~/.claude)', 'dim')}")
         return 0
+    email = next((a for a in ctx.args[1:] if "@" in a), "")
     d = core.new_profile(st, name)
-    header_msg = f"Signing in {name}"
-    ui.header(header_msg)
-    ui.note("Claude Code's sign-in opens in your browser; pick the account you want as " + name)
+    ui.header(f"Signing in {name}")
+    ui.note("a tab opens in your browser" + (f" with {email} filled in" if email else "")
+            + ": enter the code Anthropic emails you there; if the page then shows a code, paste it here")
     env = dict(os.environ, CLAUDE_CONFIG_DIR=d)
-    r = subprocess.run([core.real_claude(), "auth", "login"], env=env)
+    r = subprocess.run([core.real_claude(), "auth", "login", "--claudeai"] + (["--email", email] if email else []), env=env)
     try:
         who = core.register(st, name, d)
     except VeshaError:
@@ -462,7 +465,7 @@ def relogin(st, name):
     if d != core.MAIN_DIR:
         core.link_shared(d, core.config()["share_history"])
         env["CLAUDE_CONFIG_DIR"] = d
-    subprocess.run([core.real_claude(), "auth", "login"], env=env)
+    subprocess.run([core.real_claude(), "auth", "login", "--claudeai"] + (["--email", a["email"]] if a.get("email") else []), env=env)
     who = core.identity(d)
     if not who["signed_in"]:
         raise VeshaError("still not signed in")
