@@ -729,7 +729,7 @@ def cmd_doctor(ctx):
             issues.append(f"signed out: vesha login {n}")
         if who["login_expires"] and who["login_expires"] < time.time() + 7 * 86400:
             issues.append(f"its login expires soon: vesha login {n}")
-        if not a.get("main"):
+        if not a.get("main") and os.path.isdir(d):   # a profile is made when the account signs in
             for item in core.SHARED[:2]:
                 src = os.path.join(core.MAIN_DIR, item)
                 if os.path.exists(src) and not os.path.islink(os.path.join(d, item)):
