@@ -51,7 +51,7 @@ PALETTE = {  # Catppuccin Mocha, as curses colour numbers 16+
 theme.apply(PALETTE, {"text": "text", "sub": "subtext0", "dim": "overlay1", "faint": "surface1", "peach": "peach",
                       "green": "green", "red": "red", "yellow": "yellow", "sky": "sky", "mauve": "mauve", "lav": "lavender",
                       "crust": "crust", "selbg": ("base", "surface0", 0.5), "surface": "surface0", "rose": "accent2",
-                      "border": "surface2"})
+                      "border": "frame"})
 FALLBACK = {"text": curses.COLOR_WHITE, "sub": curses.COLOR_WHITE, "dim": curses.COLOR_WHITE, "faint": curses.COLOR_BLACK,
             "peach": curses.COLOR_YELLOW, "green": curses.COLOR_GREEN, "red": curses.COLOR_RED, "yellow": curses.COLOR_YELLOW,
             "sky": curses.COLOR_CYAN, "mauve": curses.COLOR_MAGENTA, "lav": curses.COLOR_BLUE, "crust": curses.COLOR_BLACK,

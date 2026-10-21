@@ -2,6 +2,11 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.3.3 -- 2026-10-21
+
+- The switcher's panel borders use the theme's `frame` colour (varna 0.1.7),
+  so they stay visible on a transparent terminal in every theme.
+
 ## v0.3.2 -- 2026-10-21
 
 - Fixed: inside tmux (the `prefix C` popup), where programs can't redefine
