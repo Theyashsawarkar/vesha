@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Lint
+        run: pipx run ruff check .
+      - name: Compile
+        run: python -m py_compile bin/vesha vesha/*.py
+      - name: ShellCheck
+        run: shellcheck -S warning install.sh
+      - name: Version and changelog agree
+        run: |
+          v=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' vesha/__init__.py)
+          grep -q "^## v$v " CHANGELOG.md || { echo "CHANGELOG.md has no entry for v$v"; exit 1; }
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Commands work without accounts (throwaway home)
+        run: |
+          export HOME=$(mktemp -d)
+          bin/vesha --version
+          bin/vesha help >/dev/null
+          for c in $(bin/vesha help | sed -n 's/^  \([a-z][a-z-]*\) .*/\1/p'); do bin/vesha "$c" --help >/dev/null; done
+          bin/vesha list
+          bin/vesha which || true
+          bin/vesha init zsh | grep -q 'vesha'
+          bin/vesha init bash | grep -q 'vesha'
+          bin/vesha doctor || true
+      - name: Every switcher key is documented
+        run: |
+          grep -o '^# keybind: Vesha/switcher | [^|]*' vesha/tui.py | sed 's/.*| //; s/ *$//' | while read -r k; do
+            first=$(printf '%s' "$k" | awk '{print $1}')
+            grep -qF "\`$first\`" README.md || { echo "README doesn't document $first"; exit 1; }
+          done
+      - name: Website is up to date
+        run: python3 scripts/build-site.py --check

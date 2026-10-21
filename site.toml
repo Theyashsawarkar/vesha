@@ -1,0 +1,8 @@
+# The project website (docs/, GitHub Pages): built by scripts/build-site.py
+name = "vesha"
+sanskrit = "वेष"
+meaning = "guise"
+tagline = "Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit."
+color = "peach"
+kind = "account switcher"
+logo = "assets/logo.svg"

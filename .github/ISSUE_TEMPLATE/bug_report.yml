@@ -1,0 +1,25 @@
+name: Bug report
+description: Something in vesha doesn't work as described
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `vesha --version` and `vesha doctor` (replace your emails), `claude --version`, your distribution.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Output and log
+      description: The command you ran and its output, and for automatic switching the end of `~/.local/state/vesha/watch.log`. Never paste tokens or the contents of `.credentials.json`.
+      render: text

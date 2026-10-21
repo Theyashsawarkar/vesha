@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vesha · Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit.</title>
+<meta name="description" content="Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit.">
+<meta property="og:title" content="vesha · Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit.">
+<meta property="og:description" content="Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit.">
+<meta name="theme-color" content="#11111b">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+<style>:root{--accent:#fab387;--glow:#fab38733}</style>
+</head>
+<body>
+<header class="top"><div class="in">
+<a class="brand" href="index.html"><img src="assets/logo.svg" alt=""><span>vesha <small>वेष</small></span></a>
+<nav><a href="index.html" class="on">Overview</a><a href="changelog.html" class="">Changelog</a><a href="adr/index.html" class=" hide">Decisions</a><a class="gh" href="https://github.com/Theyashsawarkar/vesha">GitHub ↗</a></nav></div></header>
+<section class="hero"><div class="in"><div>
+<div class="eyebrow">account switcher</div>
+<h1>vesha</h1>
+<div class="sa">वेष <span>· “guise”</span></div>
+<p class="lead">Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit.</p>
+<div class="cta"><a class="btn primary" href="#install">Install</a><a class="btn" href="https://github.com/Theyashsawarkar/vesha">GitHub ↗</a>
+<a class="btn" href="changelog.html">What's new in v0.1.0</a></div>
+<div class="meta"><span><b>v0.1.0</b> latest</span><span><b>1</b> releases</span><span><b>7</b> decisions recorded</span><span><b>MIT</b> license</span></div>
+</div><img class="logo" src="assets/logo.svg" alt="vesha logo"></div></section>
+<div class="wrap"><aside class="toc"><b>On this page</b><a class="l2" href="#features">Features</a><a class="l2" href="#install">Install</a><a class="l2" href="#getting-started">Getting started</a><a class="l2" href="#the-switcher">The switcher</a><a class="l2" href="#commands">Commands</a><a class="l2" href="#automatic-switching">Automatic switching</a><a class="l2" href="#which-account-a-new-claude-uses">Which account a new claude uses</a><a class="l2" href="#configuration">Configuration</a><a class="l2" href="#integrations">Integrations</a><a class="l2" href="#how-it-works">How it works</a><a class="l2" href="#coming-from-claude-swap">Coming from claude-swap</a><a class="l2" href="#troubleshooting">Troubleshooting</a><a class="l2" href="#contributing">Contributing</a><a class="l2" href="#license">License</a></aside><article>
+<blockquote><p><em>Vesha</em> (वेष) is Sanskrit for "guise, attire": the same Claude, wearing whichever account you choose.</p></blockquote>
+<p>You have more than one Claude subscription: a personal one, a work one, maybe a client's. Claude Code signs in to one at a time, and when its 5-hour limit runs out mid-task you sign out, sign in to the other, and lose your flow. <strong>vesha</strong> keeps every account signed in at once, each in its own Claude Code profile, and decides which one a new <code>claude</code> starts with. Switch with one key in the switcher or <code>vesha switch</code>; when the active account reaches its limit, vesha switches to the one with the most room left and tells you.</p>
+<p align="center">
+  <img alt="The switcher: four accounts with their email and plan, 5-hour and weekly usage bars with time to reset, tags for the active account, the one this folder uses, paused, and running sessions; below, the selected account's details and the folder rules" src="assets/screenshots/switcher.png" width="100%">
+</p>
+<h2 id="features"><a class="anchor" href="#features">#</a>Features</h2>
+<ul><li><strong>Every account signed in at once</strong>: each account is its own Claude Code profile; switching never signs anything out, and sessions already running keep going on their account.</li><li><strong>Switch from anywhere</strong>: <code>vesha switch work</code> (or one key in the switcher) changes the account every new <code>claude</code> uses, in every folder and every terminal. No restart, no re-login.</li><li><strong>Automatic switching at the limit</strong>: a small background watcher warns you near the limit (with a "Switch to …" button on the notification) and switches by itself when the active account runs out, to the account with the most room left.</li><li><strong>Limits at a glance</strong>: 5-hour and weekly usage for every account, with the time each resets, in the switcher, <code>vesha usage</code>, and your status bar.</li><li><strong>Vim keys throughout</strong>: <code>j</code>/<code>k</code>, <code>gg</code>/<code>G</code>, counts, <code>/</code> search, <code>dd</code>, <code>cw</code>, <code>?</code> for every key.</li><li><strong>One setup, every account</strong>: your CLAUDE.md, settings, skills, plugins, agents and commands are shared by every account, and so is your history, so <code>claude --resume</code> finds a conversation whichever account started it.</li><li><strong>Optional folder rules</strong>: <code>vesha map client ~/code/northwind</code> and that folder (and everything under it) always uses that account.</li><li><strong>This terminal only</strong>: <code>vesha use oss</code> switches just the current shell; <code>vesha run work -- claude -p &quot;...&quot;</code> runs one command as another account.</li><li><strong>Imports claude-swap</strong>: <code>vesha import cswap</code> brings its accounts across.</li><li><strong>Safe with your logins</strong>: only one copy of each login ever exists (Claude Code rotates them; copies would log each other out), files are private to you, and no token is ever printed.</li><li><strong>No dependencies</strong> beyond Python 3.11's standard library.</li></ul>
+<h2 id="install"><a class="anchor" href="#install">#</a>Install</h2>
+<p>With <a href="https://github.com/Theyashsawarkar/kosha">kosha</a>:</p>
+<pre class="code" data-lang="sh"><code>kosha install vesha</code></pre>
+<p>Or with the installer, which clones vesha into <code>~/.local/share/vesha</code> and links <code>~/.local/bin/vesha</code> (no root):</p>
+<pre class="code" data-lang="sh"><code>curl -fsSL https://raw.githubusercontent.com/Theyashsawarkar/vesha/main/install.sh | bash</code></pre>
+<p>Or by hand:</p>
+<pre class="code" data-lang="sh"><code>git clone https://github.com/Theyashsawarkar/vesha ~/.local/share/vesha
+ln -s ~/.local/share/vesha/bin/vesha ~/.local/bin/vesha</code></pre>
+<p><strong>Requirements:</strong> Linux, Python 3.11+, <a href="https://docs.claude.com/en/docs/claude-code">Claude Code</a> signed in with a Claude subscription (Pro, Max, Team or Enterprise). Optional: <code>notify-send</code> for notifications, <code>wl-copy</code> to copy an email from the switcher, systemd for the background watcher.</p>
+<h2 id="getting-started"><a class="anchor" href="#getting-started">#</a>Getting started</h2>
+<pre class="code" data-lang="sh"><code>vesha add personal --current   # the account Claude Code is already signed in to
+vesha add work                 # signs in another account (opens Claude Code&#x27;s sign-in)
+vesha install-shim             # plain `claude` now follows the active account
+vesha service install          # the watcher: warns near limits, switches at them
+eval &quot;$(vesha init zsh)&quot;       # in ~/.zshrc: `vesha use` and tab completion (or bash)
+vesha doctor                   # checks all of it</code></pre>
+<p>Then <code>vesha</code> opens the switcher, and <code>vesha switch work</code> or <code>vesha switch</code> (the next account) switches from the command line.</p>
+<p align="center">
+  <img alt="vesha usage lists every account's 5-hour and weekly usage with bars and reset times; vesha which says the account a new claude would use here, and why; vesha switch work makes work the active account" src="assets/screenshots/cli.png" width="84%">
+</p>
+<h2 id="the-switcher"><a class="anchor" href="#the-switcher">#</a>The switcher</h2>
+<p><code>vesha</code> on its own opens it. The top shows the account a new <code>claude</code> would use in this folder and why; each row shows an account's email and plan, both limits with the time to reset, and tags: <strong>active</strong>, <strong>here</strong> (this folder's rule), <strong>paused</strong>, and how many sessions are running on it.</p>
+<div class="table"><table><thead><tr><th>Key</th><th>Does</th></tr></thead><tbody><tr><td><code>j</code> / <code>k</code></td><td>Move down / up (counts work: <code>3j</code>)</td></tr><tr><td><code>gg</code> / <code>G</code></td><td>First / last account</td></tr><tr><td><code>Ctrl+d</code> / <code>Ctrl+u</code></td><td>Half a page down / up</td></tr><tr><td><code>1-9</code></td><td>Jump to that account</td></tr><tr><td><code>Tab</code></td><td>Between accounts and folder rules</td></tr><tr><td><code>Enter</code> / <code>s</code></td><td>Switch to the account</td></tr><tr><td><code>r</code></td><td>Run claude as the account, in this folder, just this once</td></tr><tr><td><code>u</code></td><td>Refresh usage now</td></tr><tr><td><code>p</code></td><td>Pause / resume (out of automatic switching)</td></tr><tr><td><code>m</code></td><td>This folder always uses the account</td></tr><tr><td><code>a</code></td><td>Add an account (sign in)</td></tr><tr><td><code>R</code> / <code>cw</code></td><td>Rename the account</td></tr><tr><td><code>dd</code></td><td>Remove the account, or the folder rule (asks first)</td></tr><tr><td><code>y</code></td><td>Copy the account's email</td></tr><tr><td><code>/</code>, <code>n</code> / <code>N</code></td><td>Search; next / previous match</td></tr><tr><td><code>?</code></td><td>Every key</td></tr><tr><td><code>q</code> / <code>Esc</code></td><td>Quit</td></tr></tbody></table></div>
+<p align="center">
+  <img alt="The key sheet over the switcher: movement, account actions and other keys in columns" src="assets/screenshots/keys.png" width="84%">
+</p>
+<h2 id="commands"><a class="anchor" href="#commands">#</a>Commands</h2>
+<p>Every command has <code>--help</code> with examples; <code>vesha help</code> lists them all.</p>
+<div class="table"><table><thead><tr><th>Command</th><th>Does</th></tr></thead><tbody><tr><td><code>vesha</code></td><td>The switcher (without a terminal: the account list)</td></tr><tr><td><code>vesha switch [name]</code></td><td>Make an account the active one; no name: the next one (<code>sw</code>, <code>s</code>)</td></tr><tr><td><code>vesha list</code></td><td>Every account: plan, usage, which is active (<code>ls</code>, <code>status</code>)</td></tr><tr><td><code>vesha usage</code></td><td>Both limits of every account, with reset times (<code>u</code>)</td></tr><tr><td><code>vesha which</code></td><td>The account a new claude would use here, and why (<code>w</code>)</td></tr><tr><td><code>vesha run &lt;name&gt; [-- cmd …]</code></td><td>Run claude (or any command) as an account, once (<code>r</code>)</td></tr><tr><td><code>vesha use &lt;name&gt;</code></td><td>This terminal only (needs the shell hook)</td></tr><tr><td><code>vesha auto on|off</code></td><td>Automatic switching at the limit</td></tr><tr><td><code>vesha pause &lt;name&gt;</code> / <code>resume</code></td><td>Keep an account out of automatic switching</td></tr><tr><td><code>vesha add &lt;name&gt; [--current]</code></td><td>Sign in a new account, or adopt the current one (<code>login</code> signs in again)</td></tr><tr><td><code>vesha remove &lt;name&gt;</code></td><td>Forget an account and delete its profile (<code>rm</code>)</td></tr><tr><td><code>vesha rename &lt;old&gt; &lt;new&gt;</code></td><td>Rename an account (<code>mv</code>)</td></tr><tr><td><code>vesha import cswap</code></td><td>Bring your claude-swap accounts across</td></tr><tr><td><code>vesha map &lt;name&gt; [folder]</code> / <code>unmap</code></td><td>Optional folder rules</td></tr><tr><td><code>vesha install-shim</code> / <code>uninstall-shim</code></td><td>The <code>claude</code> wrapper</td></tr><tr><td><code>vesha service install|remove|status</code></td><td>The background watcher (systemd user unit)</td></tr><tr><td><code>vesha init zsh|bash</code></td><td>The shell hook for <code>vesha use</code> and completion</td></tr><tr><td><code>vesha doctor</code></td><td>Check every account, the wrapper and the watcher (<code>check</code>)</td></tr><tr><td><code>vesha waybar</code></td><td>JSON for a waybar module</td></tr></tbody></table></div>
+<p>Options: <code>-y</code> don't ask, <code>--json</code> (list, usage, which), <code>--no-color</code> (also <code>NO_COLOR=1</code>), <code>-h</code>, <code>-V</code>.</p>
+<h2 id="automatic-switching"><a class="anchor" href="#automatic-switching">#</a>Automatic switching</h2>
+<p><code>vesha service install</code> starts <code>vesha.service</code>, a systemd user unit that checks the active account's usage every two minutes (every minute once it's close):</p>
+<ul><li>At <strong>85%</strong> of either limit it notifies you once per window, with a <strong>Switch to …</strong> button naming the account with the most room.</li><li>At <strong>98%</strong> it switches the active account to that account and tells you which one, and when the old one resets. New <code>claude</code> sessions use it everywhere; a session that hit the limit continues on the new account when you restart it (<code>claude --continue</code>: the history is shared).</li><li>If every account is at its limit, it tells you when the first one resets.</li></ul>
+<p>"Most room" means the lowest of each account's worse window (a 5-hour limit at 20% doesn't help if the week is at 95%). Paused accounts, and accounts whose usage couldn't be checked, are never picked. <code>vesha auto off</code> keeps the warnings and stops the switching; the log is <code>~/.local/state/vesha/watch.log</code>.</p>
+<h2 id="which-account-a-new-claude-uses"><a class="anchor" href="#which-account-a-new-claude-uses">#</a>Which account a new claude uses</h2>
+<p>In this order, first match wins:</p>
+<ol><li><code>VESHA_ACCOUNT</code> in the environment: <code>vesha use</code> and <code>vesha run</code> set it for one terminal or one command.</li><li>A folder rule (<code>vesha map</code>): the closest rule above the current folder.</li><li>The <strong>active</strong> account: the one <code>vesha switch</code> (and the watcher) set.</li></ol>
+<p><code>vesha which</code> prints the answer and the reason for the current folder. Folder rules are optional; without any, every folder follows the active account.</p>
+<h2 id="configuration"><a class="anchor" href="#configuration">#</a>Configuration</h2>
+<p><code>~/.config/vesha/config.toml</code> (every key optional):</p>
+<pre class="code" data-lang="toml"><code>warn_at = 85         # notify at this % of either limit
+switch_at = 98       # switch the active account at this %
+auto = true          # switch automatically (else only notify)
+share_history = true # every account shares conversations, todos, plans
+usage_ttl = 180      # seconds to reuse fetched usage
+check_every = 120    # seconds between the watcher&#x27;s checks</code></pre>
+<h2 id="integrations"><a class="anchor" href="#integrations">#</a>Integrations</h2>
+<p><strong>tmux</strong>: a popup on a key:</p>
+<pre class="code" data-lang="tmux"><code>bind -N &quot;Switch Claude Code account (vesha)&quot; C display-popup -E -w 80% -h 70% vesha</code></pre>
+<p><strong>waybar</strong>: the active account and its 5-hour usage, every account in the tooltip; click for the switcher, scroll to switch. <code>vesha waybar</code> keeps running and redraws the moment the account changes:</p>
+<pre class="code" data-lang="jsonc"><code>&quot;custom/vesha&quot;: {
+  &quot;exec&quot;: &quot;vesha waybar&quot;,
+  &quot;return-type&quot;: &quot;json&quot;,
+  &quot;on-click&quot;: &quot;kitty --class vesha -e vesha&quot;,
+  &quot;on-scroll-up&quot;: &quot;vesha switch&quot;,
+  &quot;on-scroll-down&quot;: &quot;vesha switch&quot;
+}</code></pre>
+<p>The JSON's <code>class</code> is <code>ok</code>, <code>warn</code>, <code>full</code> or <code>unknown</code> for styling. It hides itself with fewer than two accounts.</p>
+<p><strong>Scripts</strong>: <code>vesha list --json</code>, <code>vesha usage --json</code> and <code>vesha which --json</code>; exit codes are 0 (fine), 1 (failed) and 2 (bad usage).</p>
+<h2 id="how-it-works"><a class="anchor" href="#how-it-works">#</a>How it works</h2>
+<ul><li><strong>One profile per account.</strong> The account already in <code>~/.claude</code> stays there; each other one gets <code>~/.local/share/vesha/profiles/&lt;name&gt;</code>, which Claude Code uses through <code>CLAUDE_CONFIG_DIR</code>. Your setup (CLAUDE.md, settings, skills, plugins, agents, commands, output styles, keybindings) is linked into every profile from <code>~/.claude</code>, and with <code>share_history</code> so are your projects, history, todos, file history and plans.</li><li><strong>The wrapper.</strong> <code>vesha install-shim</code> puts a small <code>claude</code> in <code>~/.local/bin</code> that asks vesha which account applies and runs the real Claude Code with that profile. It adds a few milliseconds.</li><li><strong>One copy of each login.</strong> Claude Code rotates its login tokens, so vesha never copies them: each login lives only in its profile. To read usage, vesha calls the same endpoint Claude Code's <code>/usage</code> does, renewing an expired token itself only when no Claude Code is running on that profile.</li><li><strong>State</strong> is <code>~/.local/share/vesha/accounts.json</code> (names, which is active, folder rules; private to you), usage is cached in <code>~/.cache/vesha</code>.</li></ul>
+<h2 id="coming-from-claude-swap"><a class="anchor" href="#coming-from-claude-swap">#</a>Coming from claude-swap</h2>
+<pre class="code" data-lang="sh"><code>vesha import cswap      # every claude-swap account, with its login
+vesha list              # check them; rename with: vesha rename &lt;old&gt; &lt;new&gt;</code></pre>
+<p>The account signed in to <code>~/.claude</code> becomes vesha's main account; the others get their own profiles. Once vesha works for you, remove claude-swap (<code>uv tool uninstall claude-swap</code> or however you installed it): switching with both would fight over <code>~/.claude</code>.</p>
+<h2 id="troubleshooting"><a class="anchor" href="#troubleshooting">#</a>Troubleshooting</h2>
+<p>Start with <code>vesha doctor</code>: it checks Claude Code, the wrapper, the watcher and every login, and prints the command that fixes each problem.</p>
+<ul><li><strong><code>claude</code> ignores the switch</strong>: another <code>claude</code> comes first on your PATH. <code>vesha doctor</code> says which; put <code>~/.local/bin</code> first.</li><li><strong>An account shows "signed out"</strong>: its login expired or was revoked. <code>vesha login &lt;name&gt;</code> signs it in again.</li><li><strong>Usage shows "token renewing in Claude"</strong>: Claude Code is running on that account and will renew its token itself; the last known numbers are shown meanwhile.</li><li><strong>No notifications</strong>: install <code>libnotify</code> (<code>notify-send</code>) and a notification daemon; <code>vesha service status</code> shows the watcher's log.</li></ul>
+<h2 id="contributing"><a class="anchor" href="#contributing">#</a>Contributing</h2>
+<p>Issues and pull requests are welcome: see <a href="https://github.com/Theyashsawarkar/vesha/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>. Design decisions are recorded in <a href="https://github.com/Theyashsawarkar/vesha/blob/main/docs/adr">docs/adr</a>. Security issues: <a href="https://github.com/Theyashsawarkar/vesha/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+<h2 id="license"><a class="anchor" href="#license">#</a>License</h2>
+<p><a href="https://github.com/Theyashsawarkar/vesha/blob/main/LICENSE">MIT</a>. Not affiliated with Anthropic; Claude and Claude Code are Anthropic's.</p>
+</article></div>
+<footer><div class="in"><div><h4>Desktop</h4><a href="https://theyashsawarkar.github.io/vayu/" class="">vayu <span>वायु · the keyboard-driven Wayland desktop</span></a></div><div><h4>Apps</h4><a href="https://theyashsawarkar.github.io/kosha/" class="">kosha <span>कोश · package manager</span></a><a href="https://theyashsawarkar.github.io/nada/" class="">nada <span>नाद · music player</span></a><a href="https://theyashsawarkar.github.io/sangam/" class="">sangam <span>संगम · pull requests in the terminal</span></a><a href="https://theyashsawarkar.github.io/anumati/" class="">anumati <span>अनुमति · root commands for AI agents</span></a><a href="https://theyashsawarkar.github.io/vesha/" class="me">vesha <span>वेष · Claude Code accounts</span></a></div><div><h4>Vyom</h4><a href="https://theyashsawarkar.github.io/vyom/" class="">vyom <span>व्योम · panels runtime</span></a></div><div><h4>Vyom tools</h4><a href="https://theyashsawarkar.github.io/dvara/" class="">dvara <span>द्वार · apps</span></a><a href="https://theyashsawarkar.github.io/ganit/" class="">ganit <span>गणित · calculator</span></a><a href="https://theyashsawarkar.github.io/smriti/" class="">smriti <span>स्मृति · clipboard</span></a><a href="https://theyashsawarkar.github.io/bhava/" class="">bhava <span>भाव · emoji</span></a><a href="https://theyashsawarkar.github.io/tarang/" class="">tarang <span>तरंग · Wi‑Fi</span></a><a href="https://theyashsawarkar.github.io/setu/" class="">setu <span>सेतु · Bluetooth</span></a><a href="https://theyashsawarkar.github.io/doot/" class="">doot <span>दूत · phone</span></a><a href="https://theyashsawarkar.github.io/patra/" class="">patra <span>पात्र · Docker</span></a><a href="https://theyashsawarkar.github.io/suchana/" class="">suchana <span>सूचना · notifications</span></a><a href="https://theyashsawarkar.github.io/raga/" class="">raga <span>राग · YouTube</span></a><a href="https://theyashsawarkar.github.io/mudra/" class="">mudra <span>मुद्रा · keybindings</span></a><a href="https://theyashsawarkar.github.io/urja/" class="">urja <span>ऊर्जा · battery</span></a><a href="https://theyashsawarkar.github.io/vishram/" class="">vishram <span>विश्राम · power menu</span></a><a href="https://theyashsawarkar.github.io/kendra/" class="">kendra <span>केन्द्र · quick settings</span></a></div></div>
+<div class="bottom">vesha is free software under the MIT license · <a href="https://github.com/Theyashsawarkar/vesha">source</a> · <a href="https://github.com/Theyashsawarkar/vesha/issues">issues</a> · <a href="changelog.html">changelog</a> · part of <a href="https://theyashsawarkar.github.io/vayu/">Vayu</a></div></footer>
+<script>
+document.querySelectorAll('pre.code').forEach(p=>{const b=document.createElement('button');b.className='copy';b.textContent='Copy';
+b.onclick=()=>{navigator.clipboard.writeText(p.innerText.replace(/^Copy/,'')).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1200)})};p.appendChild(b)});
+const links=[...document.querySelectorAll('.toc a')];if(links.length){const hs=links.map(a=>document.getElementById(a.hash.slice(1))).filter(Boolean);
+const on=()=>{let cur=hs[0];for(const h of hs){if(h.getBoundingClientRect().top<120)cur=h}links.forEach(a=>a.classList.toggle('on',cur&&a.hash==='#'+cur.id))};
+addEventListener('scroll',on,{passive:true});on()}
+</script>
+</body>
+</html>

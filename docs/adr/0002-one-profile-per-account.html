@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADR 0002: 2. One Claude Code profile per account · vesha</title>
+<meta name="description" content="Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit.">
+<meta property="og:title" content="ADR 0002: 2. One Claude Code profile per account · vesha">
+<meta property="og:description" content="Every Claude Code account, one key away: switch from anywhere, and switch by itself at the limit.">
+<meta name="theme-color" content="#11111b">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/site.css">
+<style>:root{--accent:#fab387;--glow:#fab38733}</style>
+</head>
+<body>
+<header class="top"><div class="in">
+<a class="brand" href="../index.html"><img src="../assets/logo.svg" alt=""><span>vesha <small>वेष</small></span></a>
+<nav><a href="../index.html" class="">Overview</a><a href="../changelog.html" class="">Changelog</a><a href="../adr/index.html" class="on hide">Decisions</a><a class="gh" href="https://github.com/Theyashsawarkar/vesha">GitHub ↗</a></nav></div></header>
+
+<div class="wrap"><aside class="toc"></aside><article>
+<p class="n"><span class="status accepted">Accepted</span> <span style="color:var(--ov1);font:13px var(--mono)">ADR 0002 · 2026-10-21</span></p><h2 id="2-one-claude-code-profile-per-account"><a class="anchor" href="#2-one-claude-code-profile-per-account">#</a>2. One Claude Code profile per account</h2>
+<h2 id="context"><a class="anchor" href="#context">#</a>Context</h2>
+<p>Claude Code keeps one login in its config folder (<code>~/.claude</code>). Tools like claude-swap switch accounts by saving that login away and writing another one in its place. That makes switching global and destructive: every running session's login changes underneath it, a switch while Claude refreshes its token can lose a login, and two accounts can never be used at the same time.</p>
+<p>Claude Code also reads <code>CLAUDE_CONFIG_DIR</code>: point it at another folder and that folder is a complete, separate profile with its own login.</p>
+<h2 id="decision"><a class="anchor" href="#decision">#</a>Decision</h2>
+<p>Every account is its own profile. The account already in <code>~/.claude</code> stays there (vesha's "main" account, so Claude Code without vesha still works); every other account gets <code>~/.local/share/vesha/profiles/&lt;name&gt;</code>. Switching never touches a login: it only changes which profile the next <code>claude</code> starts with.</p>
+<h2 id="consequences"><a class="anchor" href="#consequences">#</a>Consequences</h2>
+<ul><li>Any number of accounts are signed in at once; sessions already running keep their account.</li><li>Switching is instant and can't corrupt a login.</li><li>Settings, skills and history would be per profile, so vesha links them (ADR 4).</li><li>Signing in a new account goes through Claude Code's own <code>/login</code> in the new profile; vesha never handles a password.</li></ul><p style="margin-top:40px"><a href="index.html">← All decisions</a> · <a href="https://github.com/Theyashsawarkar/vesha/blob/main/docs/adr/0002-one-profile-per-account.md">source</a></p>
+</article></div>
+<footer><div class="in"><div><h4>Desktop</h4><a href="https://theyashsawarkar.github.io/vayu/" class="">vayu <span>वायु · the keyboard-driven Wayland desktop</span></a></div><div><h4>Apps</h4><a href="https://theyashsawarkar.github.io/kosha/" class="">kosha <span>कोश · package manager</span></a><a href="https://theyashsawarkar.github.io/nada/" class="">nada <span>नाद · music player</span></a><a href="https://theyashsawarkar.github.io/sangam/" class="">sangam <span>संगम · pull requests in the terminal</span></a><a href="https://theyashsawarkar.github.io/anumati/" class="">anumati <span>अनुमति · root commands for AI agents</span></a><a href="https://theyashsawarkar.github.io/vesha/" class="me">vesha <span>वेष · Claude Code accounts</span></a></div><div><h4>Vyom</h4><a href="https://theyashsawarkar.github.io/vyom/" class="">vyom <span>व्योम · panels runtime</span></a></div><div><h4>Vyom tools</h4><a href="https://theyashsawarkar.github.io/dvara/" class="">dvara <span>द्वार · apps</span></a><a href="https://theyashsawarkar.github.io/ganit/" class="">ganit <span>गणित · calculator</span></a><a href="https://theyashsawarkar.github.io/smriti/" class="">smriti <span>स्मृति · clipboard</span></a><a href="https://theyashsawarkar.github.io/bhava/" class="">bhava <span>भाव · emoji</span></a><a href="https://theyashsawarkar.github.io/tarang/" class="">tarang <span>तरंग · Wi‑Fi</span></a><a href="https://theyashsawarkar.github.io/setu/" class="">setu <span>सेतु · Bluetooth</span></a><a href="https://theyashsawarkar.github.io/doot/" class="">doot <span>दूत · phone</span></a><a href="https://theyashsawarkar.github.io/patra/" class="">patra <span>पात्र · Docker</span></a><a href="https://theyashsawarkar.github.io/suchana/" class="">suchana <span>सूचना · notifications</span></a><a href="https://theyashsawarkar.github.io/raga/" class="">raga <span>राग · YouTube</span></a><a href="https://theyashsawarkar.github.io/mudra/" class="">mudra <span>मुद्रा · keybindings</span></a><a href="https://theyashsawarkar.github.io/urja/" class="">urja <span>ऊर्जा · battery</span></a><a href="https://theyashsawarkar.github.io/vishram/" class="">vishram <span>विश्राम · power menu</span></a><a href="https://theyashsawarkar.github.io/kendra/" class="">kendra <span>केन्द्र · quick settings</span></a></div></div>
+<div class="bottom">vesha is free software under the MIT license · <a href="https://github.com/Theyashsawarkar/vesha">source</a> · <a href="https://github.com/Theyashsawarkar/vesha/issues">issues</a> · <a href="../changelog.html">changelog</a> · part of <a href="https://theyashsawarkar.github.io/vayu/">Vayu</a></div></footer>
+<script>
+document.querySelectorAll('pre.code').forEach(p=>{const b=document.createElement('button');b.className='copy';b.textContent='Copy';
+b.onclick=()=>{navigator.clipboard.writeText(p.innerText.replace(/^Copy/,'')).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1200)})};p.appendChild(b)});
+const links=[...document.querySelectorAll('.toc a')];if(links.length){const hs=links.map(a=>document.getElementById(a.hash.slice(1))).filter(Boolean);
+const on=()=>{let cur=hs[0];for(const h of hs){if(h.getBoundingClientRect().top<120)cur=h}links.forEach(a=>a.classList.toggle('on',cur&&a.hash==='#'+cur.id))};
+addEventListener('scroll',on,{passive:true});on()}
+</script>
+</body>
+</html>

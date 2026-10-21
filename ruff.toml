@@ -1,0 +1,14 @@
+# Lint: `ruff check .` (CI runs it). Real bugs and dead code, not style taste.
+line-length = 140
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W", "B", "UP", "PLE", "RUF100"]
+ignore = [
+  "E731",   # small lambdas are fine
+  "B008",
+  "UP015",
+]
+
+[lint.per-file-ignores]
+"scripts/build-site.py" = ["E501"]   # HTML and CSS templates
