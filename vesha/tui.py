@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 
-from . import core
+from . import core, theme
 
 # keybind: Vesha/switcher | j / k | Move down / up an account (counts work: 3j)
 # keybind: Vesha/switcher | gg / G | Jump to the first / last account
@@ -47,6 +47,11 @@ PALETTE = {  # Catppuccin Mocha, as curses colour numbers 16+
     "sky": (137, 220, 235), "mauve": (203, 166, 247), "lav": (180, 190, 254), "crust": (17, 17, 27),
     "selbg": (42, 43, 60), "surface": (49, 50, 68), "rose": (235, 160, 172), "border": (88, 91, 112),
 }
+# The current theme's colours, when varna is installed (vesha/theme.py).
+theme.apply(PALETTE, {"text": "text", "sub": "subtext0", "dim": "overlay1", "faint": "surface1", "peach": "peach",
+                      "green": "green", "red": "red", "yellow": "yellow", "sky": "sky", "mauve": "mauve", "lav": "lavender",
+                      "crust": "crust", "selbg": ("base", "surface0", 0.5), "surface": "surface0", "rose": "accent2",
+                      "border": "surface2"})
 FALLBACK = {"text": curses.COLOR_WHITE, "sub": curses.COLOR_WHITE, "dim": curses.COLOR_WHITE, "faint": curses.COLOR_BLACK,
             "peach": curses.COLOR_YELLOW, "green": curses.COLOR_GREEN, "red": curses.COLOR_RED, "yellow": curses.COLOR_YELLOW,
             "sky": curses.COLOR_CYAN, "mauve": curses.COLOR_MAGENTA, "lav": curses.COLOR_BLUE, "crust": curses.COLOR_BLACK,

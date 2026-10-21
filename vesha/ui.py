@@ -16,6 +16,14 @@ _COLORS = {
     "teal": (148, 226, 213), "lavender": (180, 190, 254),
 }
 
+try:   # the current theme's colours, when varna is installed
+    from . import theme as _theme
+    _theme.apply(_COLORS, {"text": "text", "sub": "subtext0", "dim": "overlay1", "faint": "surface2", "mauve": "mauve",
+                           "pink": "pink", "green": "green", "yellow": "yellow", "peach": "peach", "red": "red", "sky": "sky",
+                           "blue": "blue", "teal": "teal", "lavender": "lavender"})
+except ImportError:
+    pass
+
 
 def set_color(on):
     global TTY

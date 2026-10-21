@@ -2,6 +2,13 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.3.1 -- 2026-10-21
+
+- **Follows your theme**: with [varna](https://github.com/Theyashsawarkar/varna)
+  installed, the switcher and the command-line output take the current
+  theme's colours (vesha's own pick under `tools.vesha`, else the
+  desktop's); without varna, Catppuccin Mocha as before.
+
 ## v0.3.0 -- 2026-10-21
 
 - **Switching reaches running sessions**: the active account's login now
