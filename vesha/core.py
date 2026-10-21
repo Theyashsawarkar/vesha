@@ -160,6 +160,39 @@ def identity(d):
             "login_expires": (cred.get("refreshTokenExpiresAt") or 0) / 1000 or None}
 
 
+def login_copied(d, refresh_token):
+    """Whether another profile (or ~/.claude) holds this same login."""
+    dirs = [MAIN_DIR] + ([os.path.join(PROFILES, x) for x in os.listdir(PROFILES)] if os.path.isdir(PROFILES) else [])
+    for other in dirs:
+        if os.path.realpath(other) != os.path.realpath(d):
+            if ((read_credentials(other) or {}).get("claudeAiOauth") or {}).get("refreshToken") == refresh_token:
+                return True
+    return False
+
+
+def login_problems(st):
+    """{name: [problem]}: profiles now signed in to a different account than
+    the one added (claude-swap or a /login inside it changed it), and logins
+    copied between profiles (they share a refresh token: when one renews it,
+    the other is logged out)."""
+    out, seen = {}, {}
+    for n, a in st["accounts"].items():
+        d = profile_dir(st, n)
+        who = identity(d)
+        if not who["signed_in"]:
+            continue
+        if a.get("email") and (who["email"], who["org"]) != (a.get("email"), a.get("org")):
+            out.setdefault(n, []).append(
+                f"now signed in to {who['email']} ({who['org'] or 'no org'}), not the account added as {n}: "
+                f"another tool or a /login changed it")
+        rt = ((read_credentials(d) or {}).get("claudeAiOauth") or {}).get("refreshToken")
+        if rt and rt in seen:
+            out.setdefault(n, []).append(f"holds a copy of {seen[rt]}'s login: when one renews it, the other is logged out")
+        elif rt:
+            seen[rt] = n
+    return out
+
+
 def link_shared(d, share_history=True):
     """Links ~/.claude's shared setup into a profile (never over real files)."""
     os.makedirs(d, exist_ok=True)
@@ -380,6 +413,8 @@ def _refresh(d, cred):
         raise VeshaError("signed out: sign in again")
     if running_profiles().get(os.path.realpath(d)):
         raise VeshaError("token renewing in Claude")
+    if login_copied(d, oauth["refreshToken"]):   # renewing would log the other copy out
+        raise VeshaError("login copied in another profile: see vesha doctor")
     body = json.dumps({"grant_type": "refresh_token", "refresh_token": oauth["refreshToken"], "client_id": CLIENT_ID}).encode()
     req = urllib.request.Request(TOKEN_URL, data=body, headers={"Content-Type": "application/json", "User-Agent": UA})
     try:

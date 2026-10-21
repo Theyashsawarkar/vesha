@@ -678,10 +678,11 @@ def cmd_doctor(ctx):
         (ui.ok("the watcher is running (automatic switching on)") if service_active()
          else (ui.warn("automatic switching is on but the watcher isn't running: vesha service install"), None)[1])
         problems += 0 if service_active() else 1
+    logins = core.login_problems(st)
     for n, a in st["accounts"].items():
         d = core.profile_dir(st, n)
         who = core.identity(d)
-        issues = []
+        issues = list(logins.get(n, []))
         if not who["signed_in"]:
             issues.append(f"signed out: vesha login {n}")
         if who["login_expires"] and who["login_expires"] < time.time() + 7 * 86400:

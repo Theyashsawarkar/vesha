@@ -2,6 +2,15 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.1.2 -- 2026-10-21
+
+- **Catches logins changed behind vesha's back**: `vesha doctor` says when a
+  profile is now signed in to a different account than the one added (e.g.
+  claude-swap or a `/login` changed `~/.claude`), and when two profiles hold
+  a copy of the same login.
+- **Never renews a copied login**: renewing one copy logs the other out (a
+  running session, possibly), so vesha leaves it to Claude Code and says so.
+
 ## v0.1.1 -- 2026-10-21
 
 - **Accounts and profiles moved to `~/.local/state/vesha`**: v0.1.0 kept them
