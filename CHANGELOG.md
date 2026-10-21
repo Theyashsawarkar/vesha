@@ -2,6 +2,14 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.2.2 -- 2026-10-21
+
+- **Better-looking usage bars**, in the switcher and the CLI: rounded pills
+  on a soft track, filled to an eighth of a cell, wider in the overview.
+- **Their colour follows what's used**: green while there's plenty left,
+  yellow from half, red from the warning level (`warn_at`, 85%). Plain
+  `[####----]` bars without colour.
+
 ## v0.2.1 -- 2026-10-21
 
 - **`vesha import cswap` restores a lost login**: an account vesha has but

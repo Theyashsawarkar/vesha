@@ -64,7 +64,8 @@ room left and tells you.
   switches by itself when the active account runs out, to the account with
   the most room left.
 - **Limits at a glance**: 5-hour and weekly usage for every account, with
-  the time each resets, in the switcher, `vesha usage`, and your status bar.
+  the time each resets, in the switcher, `vesha usage`, and your status bar;
+  the bars go green, then yellow from half, then red near the limit.
 - **Vim keys throughout**: `j`/`k`, `gg`/`G`, counts, `/` search, `dd`,
   `cw`, `?` for every key.
 - **One setup, every account**: your CLAUDE.md, settings, skills, plugins,

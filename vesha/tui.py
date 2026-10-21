@@ -157,6 +157,11 @@ class App:
             pairs["cap_" + name] = n   # the rounded ends: the chip's colour on the background
             curses.init_pair(n, self.cp[bgc], bg)
             n += 1
+        for fg in ("green", "yellow", "red", "surface"):   # pill bars: fill on the track, rounded ends
+            for name, bgc in (("bar_", self.cp["surface"]), ("edge_", bg), ("sedge_", self.cp["selbg"])):
+                pairs[name + fg] = n
+                curses.init_pair(n, self.cp[fg], bgc)
+                n += 1
         self.pairs = pairs
 
     def a(self, name, bold=False, sel=False):
@@ -213,11 +218,18 @@ class App:
         self.put(y, x2 + 1, "─" * max(0, x + w - x2 - 2), self.a("faint"))
 
     def bar(self, y, x, pct, width, sel=False):
+        """A pill: rounded ends, a soft track, the fill drawn to an eighth of a cell."""
         pct = max(0, min(100, pct))
-        fill = round(width * pct / 100)
-        color = "red" if pct >= core.config()["warn_at"] else "peach" if pct >= 60 else "green"
-        self.put(y, x, "▪" * fill, self.a(color, sel=sel))
-        self.put(y, x + fill, "▪" * (width - fill), self.a("faint", sel=sel))
+        color = "red" if pct >= core.config()["warn_at"] else "yellow" if pct >= 50 else "green"   # used up: green → yellow → red
+        inner = max(1, width - 2)
+        eighths = round(inner * 8 * pct / 100)
+        edge = "sedge_" if sel else "edge_"
+        cp = curses.color_pair
+        self.put(y, x, "\ue0b6", cp(self.pairs[edge + (color if eighths else "surface")]))
+        for i in range(inner):
+            part = max(0, min(8, eighths - i * 8))
+            self.put(y, x + 1 + i, "█" if part == 8 else " ▏▎▍▌▋▊▉"[part], cp(self.pairs["bar_" + color]))
+        self.put(y, x + 1 + inner, "\ue0b4", cp(self.pairs[edge + (color if eighths >= inner * 8 else "surface")]))
         return color
 
     def chip(self, y, x, text, kind, pair=None):
@@ -293,7 +305,7 @@ class App:
         inner = w - 4
         week = inner >= 64
         name_w = max(10, min(16, max(len(n) for n in names) + 1))
-        use_w = 13   # "▪▪▪▪▪▪ 100%"
+        use_w = 14   # a pill of 8, then " 100%"
         email_w = max(8, inner - 6 - name_w - 10 - use_w * (2 if week else 1) - 1)
         cx = {"i": x + 3, "name": x + 8, "email": x + 8 + name_w, "plan": x + 8 + name_w + email_w + 1}
         cx["h5"] = cx["plan"] + 10
@@ -328,8 +340,8 @@ class App:
                     if key in u:
                         col = cx["h5" if key == "five_hour" else "wk"]
                         p = u[key]["pct"]
-                        color = self.bar(ry, col, p, 6, sel)
-                        self.put(ry, col + 7, f"{p:>3}%", self.a(color, True, sel))
+                        color = self.bar(ry, col, p, 8, sel)
+                        self.put(ry, col + 9, f"{p:>3}%", self.a(color, True, sel))
             elif u is not None:
                 self.put(ry, cx["h5"], ("no login" if "sign" in str(u) or "login" in str(u) else "couldn't check")[: use_w * 2],
                          self.a("yellow", sel=sel))
@@ -386,7 +398,7 @@ class App:
             cy += 1
             u = self.use.get(n)
             if isinstance(u, dict):
-                bw = max(6, min(16, iw - 44))
+                bw = max(10, min(24, iw - 36))
                 for key, label in (("five_hour", "5 hours"), ("seven_day", "week")):
                     if key in u:
                         p = u[key]["pct"]
