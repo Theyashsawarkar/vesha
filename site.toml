@@ -6,3 +6,6 @@ tagline = "Every Claude Code account, one key away: switch from anywhere, and sw
 color = "peach"
 kind = "account switcher"
 logo = "assets/logo.svg"
+shloka = "वासांसि जीर्णानि यथा विहाय नवानि गृह्णाति नरोऽपराणि ।\nतथा शरीराणि विहाय जीर्णान्यन्यानि संयाति नवानि देही ॥"
+shloka_meaning = "As one puts off worn clothes and takes others that are new, so the one within moves on to new bodies."
+shloka_source = "Bhagavad Gītā 2.22"

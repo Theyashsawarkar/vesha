@@ -2,6 +2,10 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## Unreleased
+
+- A logo and a shloka at the top of the README and the website: every Vayu tool has them now.
+
 ## v0.3.3 -- 2026-10-21
 
 - The switcher's panel borders use the theme's `frame` colour (varna 0.1.7),

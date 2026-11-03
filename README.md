@@ -6,6 +6,15 @@
   </picture>
 </p>
 
+<!-- identity -->
+<p align="center">
+  <b>वासांसि जीर्णानि यथा विहाय नवानि गृह्णाति नरोऽपराणि ।<br>
+  तथा शरीराणि विहाय जीर्णान्यन्यानि संयाति नवानि देही ॥</b><br>
+  <i>As one puts off worn clothes and takes others that are new, so the one within moves on to new bodies.</i><br>
+  <sub>Bhagavad Gītā 2.22</sub>
+</p>
+<!-- /identity -->
+
 <p align="center">
   <b>Every Claude Code account, one key away.</b><br>
   Switch the account plain <code>claude</code> uses, from any folder, see every account's limits at a glance, and let vesha switch for you when one runs out.
