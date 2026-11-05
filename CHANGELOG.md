@@ -2,8 +2,9 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
-## Unreleased
+## v0.3.4 -- 2026-11-05
 
+- Every corner is rounded: tree lines in its output use `╰`, and so do the website's callouts.
 - A logo and a shloka at the top of the README and the website: every Vayu tool has them now.
 
 ## v0.3.3 -- 2026-10-21

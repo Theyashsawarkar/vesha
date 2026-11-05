@@ -746,7 +746,7 @@ def cmd_doctor(ctx):
             problems += 1
             ui.warn(c(n, "text", bold=True))
             for i in issues:
-                ui.out(f"    {c('└', 'faint')} {i}")
+                ui.out(f"    {c('╰', 'faint')} {i}")
         else:
             ui.ok(f"{n} {c(who['email'] + ' · ' + who['plan'], 'dim')}")
     ui.out()
