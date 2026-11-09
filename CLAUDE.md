@@ -17,9 +17,10 @@ it must work without Vayu.
 - Test with a throwaway HOME (`HOME=$(mktemp -d) bin/vesha ...`), never by
   switching the user's real accounts unless asked: a real switch changes the
   account of every running Claude session, yours included.
-- Keys in the switcher: `# keybind: Vesha/switcher | <keys> | <Verb> <object>`
-  lines in tui.py, the `?` sheet and the README must agree; in Vayu run
-  `~/.local/bin/keybind-search.py --check`.
+- Keys in the switcher are data: `BINDS` in tui.py (the Space grammar, ADR 10;
+  Vyom's keys module vendored as `vesha/keys.py`, never edited here). After
+  changing a key run `scripts/keybinds.py` (writes the `# keybind:` lines),
+  update the README table, and in Vayu run `~/.local/bin/keybind-search.py --check`.
 - Standard library only. `ruff check .` and `python -m unittest discover -s tests` must pass.
 - Every change: a CHANGELOG.md entry; releases are tags with `VERSION` bumped.
 - The website (docs/, GitHub Pages) is generated: after changing README.md, CHANGELOG.md or docs/adr/, run `python3 scripts/build-site.py` and commit docs/ (CI checks it). A significant design decision gets a new ADR in docs/adr/ (next number; supersede, never rewrite).

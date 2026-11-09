@@ -38,9 +38,10 @@ jobs:
           bin/vesha doctor || true
       - name: Every switcher key is documented
         run: |
-          grep -o '^# keybind: Vesha/switcher | [^|]*' vesha/tui.py | sed 's/.*| //; s/ *$//' | while read -r k; do
-            first=$(printf '%s' "$k" | awk '{print $1}')
-            grep -qF "\`$first\`" README.md || { echo "README doesn't document $first"; exit 1; }
+          keys=$(grep -o '^# keybind: Vesha/switcher:normal | [^|]*' vesha/tui.py | sed 's/.*| //; s/ *$//')
+          [ -n "$keys" ] || { echo "no switcher keybind lines found"; exit 1; }
+          printf '%s\n' "$keys" | while read -r k; do
+            grep -qF "\`$k\`" README.md || grep -qF "\`${k// /}\`" README.md || { echo "README doesn't document $k"; exit 1; }
           done
       - name: Website is up to date
         run: python3 scripts/build-site.py --check

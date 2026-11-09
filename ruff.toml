@@ -1,6 +1,8 @@
 # Lint: `ruff check .` (CI runs it). Real bugs and dead code, not style taste.
 line-length = 140
 target-version = "py311"
+# vesha/keys.py is vendored from Vyom (scripts/vendor-keys.sh there): linted in Vyom.
+extend-exclude = ["vesha/keys.py"]
 
 [lint]
 select = ["E", "F", "W", "B", "UP", "PLE", "RUF100"]

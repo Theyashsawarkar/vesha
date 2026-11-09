@@ -2,6 +2,29 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.4.0 -- 2026-11-09
+
+- The switcher speaks the Space grammar every Vayu tool shares: normal and
+  insert modes, `Space` as the leader with a which-key strip after 0.3 s,
+  a `Space Space` palette of every action, `?` built from the same key
+  table. The keys are data in `vesha/tui.py` (`BINDS`), run through Vyom's
+  keys module (vendored as `vesha/keys.py` by Vyom's
+  `scripts/vendor-keys.sh`); `scripts/keybinds.py` writes the `# keybind:`
+  lines from it and CI checks them.
+- Moved keys: running claude is `o` (was `r`); `r` refreshes usage (was
+  `u`, which now says where it went); tabs are `H` / `L` (`h`, `l`, `Tab`
+  still work); copying the email is `yy`; adding an account is `Space a a`
+  (`a` still works); renaming is `cw` (`R` still works).
+- A number alone no longer jumps to an account after 0.6 s: it's a count
+  (`3j`, `3G`, `3gg`), so switching tabs and moving never wait.
+- Removing asks and only `y` says yes (Enter used to say yes too).
+- The sign-in code field opens in insert mode; `Esc` goes to normal mode
+  and `Esc` again cancels, so a stray Esc doesn't throw the sign-in away.
+- Fixed: F1, Insert and other keys with no character typed a stray letter
+  into the search, rename and sign-in fields (and a typed "ă" could act as
+  Up). CI's "every switcher key is in the README" check matched no lines
+  after the annotations gained `:normal`, so it passed without checking.
+
 ## v0.3.4 -- 2026-11-05
 
 - Every corner is rounded: tree lines in its output use `╰`, and so do the website's callouts.

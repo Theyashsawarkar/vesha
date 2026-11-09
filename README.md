@@ -74,8 +74,10 @@ room left and tells you.
 - **Limits at a glance**: 5-hour and weekly usage for every account, with
   the time each resets, in the switcher, `vesha usage`, and your status bar;
   the bars go green, then yellow from half, then red near the limit.
-- **Vim keys throughout**: `j`/`k`, `gg`/`G`, counts, `/` search, `dd`,
-  `cw`, `?` for every key.
+- **Vim keys throughout**: normal and insert modes, `j`/`k`, `gg`/`G`,
+  counts, `/` search, `dd`, `cw`, and `Space` as the leader (with a
+  which-key strip and a `Space Space` palette), the same grammar as every
+  Vayu tool; `?` for every key.
 - **One setup, every account**: your CLAUDE.md, settings, skills, plugins,
   agents and commands are shared by every account, and so is your history,
   so `claude --resume` finds a conversation whichever account started it.
@@ -143,42 +145,57 @@ accounts on the left with both limits; the selected account's overview on
 the right (usage with reset times, login, profile, folders, and what you
 can do with it). Marks in the list: ● active, ‖ paused, ! login changed.
 
+It opens in **normal mode**: keys are commands and typing changes nothing.
+The search, rename and add prompts are **insert mode** (`Esc` goes back).
+`Space` is the leader: press it and a strip shows what can follow. The keys
+follow the grammar every Vayu tool shares (`Space t` tabs, `Space y` copy,
+`Space a` add, `Space d` delete, `Space o` open, `Space g` go to, `Space m`
+mark, `Space Space` every action).
+
 | Key | Does |
 | --- | --- |
 | `j` / `k` | Move down / up (counts work: `3j`) |
-| `gg` / `G` | First / last account |
+| `gg` / `G` | First / last account (`5G`: the fifth) |
 | `Ctrl+d` / `Ctrl+u` | Half a page down / up |
-| `1-9` | Jump to that account |
-| `h` / `l` | The accounts / folder rules tab |
-| `Tab` | Between accounts and folder rules |
-| `Enter` / `s` | Switch to the account |
-| `r` | Run claude as the account, in this folder, just this once |
-| `u` | Refresh usage now |
-| `p` | Pause / resume (out of automatic switching) |
-| `m` | This folder always uses the account |
-| `a` | Sign in a new account, right here (see below) |
-| `R` / `cw` | Rename the account |
-| `dd` | Remove the account, or the folder rule (asks first) |
-| `y` | Copy the account's email |
-| `/`, `n` / `N` | Search; next / previous match |
-| `?` | Every key |
-| `q` / `Esc` | Quit |
+| `H` / `L` | The accounts / folder rules tab (`Space t a` / `Space t f`) |
+| `Enter` | Switch to the account |
+| `o` | Run claude as the account, in this folder, just this once (`Space o t`) |
+| `r` | Refresh usage now (`Space r`) |
+| `p` | Pause / resume, out of automatic switching (`Space m p`) |
+| `m` | This folder always uses the account (`Space m f`) |
+| `Space a a` | Sign in a new account, right here (see below) |
+| `cw` | Rename the account (`Space e n`) |
+| `dd` | Remove the account, or the folder rule (asks: `y` says yes; `Space d d`) |
+| `yy` | Copy the account's email (`Space y e`) |
+| `/`, `n` / `N` | Search; next / previous match (`Space f f`) |
+| `Space g a` | Jump to the active account |
+| `Space Space` | The palette: every action, filtered as you type |
+| `?` | Every key (`Space ?`) |
+| `q` / `Esc` | Quit (`Space q`) |
+
+Moved in v0.4.0: running claude is `o` (was `r`), refreshing usage is `r`
+(was `u`, which now says where it went), tabs are `H` / `L` (`h`, `l` and
+`Tab` still work), copying is `yy` (was `y`), adding is `Space a a` (`a`
+still works), and a number alone no longer jumps to an account: it's a
+count (`3G`, `3gg`).
 
 ### Signing in a new account
 
-Press `a`, give the account a name and (optionally) its email. A tab opens
+Press `Space a a`, give the account a name and (optionally) its email. A tab opens
 in your browser on Anthropic's sign-in page with the email filled in; enter
 the code Anthropic emails you there. If the page then shows a code, paste it
 into vesha and press Enter. The account is added and selected; `Enter`
 makes it active. vesha runs Claude Code's own sign-in for the new profile,
 so it never handles a password.
 
+The code field opens in insert mode, ready for a paste.
+
 | Key | Does |
 | --- | --- |
 | `Enter` | Send the code the sign-in page shows |
-| `Ctrl+o` | Open the sign-in page again |
-| `Ctrl+y` | Copy the sign-in link (to open it in another browser) |
-| `Esc` | Cancel (the half-made profile is removed) |
+| `Ctrl+o` / `Space o b` | Open the sign-in page again |
+| `Ctrl+y` / `Space y l` | Copy the sign-in link (to open it in another browser) |
+| `Esc` | Normal mode; there `i` types again and `q` or `Esc` cancels (the half-made profile is removed) |
 
 From a shell: `vesha add work2 you@company.com`.
 
