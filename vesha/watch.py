@@ -1,10 +1,16 @@
-"""The watcher (`vesha watch`, run by vesha.service): every couple of minutes
-it checks the active account's usage. Near a limit it warns, with a button to
-switch; at the limit it switches to the account with the most room left
-(when automatic switching is on). Running Claude sessions keep their
-account; new ones, in every folder, use the new active one."""
+"""The watcher (`vesha watch`, run by vesha.service): it keeps an eye on the
+active account's 5-hour and weekly usage. Near a limit it warns, with a
+button to switch; at `switch_at` it switches to the account with the most
+room left (when automatic switching is on). Running Claude sessions in
+~/.claude follow the switch from their next message.
+
+Its numbers come first from Claude Code itself: every session's status line
+runs `vesha feed`, which records the limits Claude got with its last reply
+and wakes the watcher (SIGUSR1) when they matter. The usage endpoint is only
+asked when those are missing or old, and never while it says 429."""
 import json
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -13,6 +19,8 @@ from . import core
 
 LOG = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.join(core.HOME, ".local/state"), "vesha", "watch.log")
 WARNED = os.path.join(os.path.dirname(LOG), "warned.json")   # what was said, so a restart doesn't say it again
+PID = os.path.join(core.CACHE, "watch.pid")   # for `vesha feed` to wake us
+WAKE = threading.Event()
 
 
 def log(msg):
@@ -51,8 +59,10 @@ def switch_to(st, name, why):
 
 
 def worst(u):
-    """(pct, which window) of the fuller of the 5-hour and weekly windows."""
-    w = [(u[k]["pct"], k) for k in ("five_hour", "seven_day") if k in u]
+    """(pct, which window) of the fuller of the 5-hour and weekly windows,
+    as far as they can be known (core.effective: last known numbers are
+    lower bounds until their window resets)."""
+    w = [(p, k) for k, p in core.effective(u).items()]
     return max(w) if w else (0, None)
 
 
@@ -73,7 +83,7 @@ def decide(st, use, conf, warned):
     warning is shown once per window."""
     active = st["default"]
     u = use.get(active)
-    if not active or len(st["accounts"]) < 2 or not isinstance(u, dict) or u.get("stale"):
+    if not active or len(st["accounts"]) < 2 or not isinstance(u, dict):
         return "ok", None
     pct, window = worst(u)
     resets = (window, window_id(u.get(window, {}).get("resets_at"))) if window else None
@@ -93,14 +103,31 @@ def decide(st, use, conf, warned):
     return "ok", None
 
 
-def tick(warned):
+def ttls(conf, near):
+    """How old (seconds) the active account's and the others' numbers may be
+    before the usage endpoint is asked. The status line keeps the active
+    one's current whenever Claude is in use; the others change only when a
+    session runs on them directly, so they are asked rarely."""
+    return (60 if near else conf["usage_ttl"]), max(600, conf["usage_ttl"])
+
+
+def tick(warned, state):
     """One check; returns how long to wait before the next."""
     conf = core.config()
     st = core.load()
     active = st["default"]
     if not active or len(st["accounts"]) < 2:
         return conf["check_every"]
-    use = core.usage(st, fresh=True)
+    t_active, t_others = ttls(conf, state.get("near", False))
+    use = core.usage(st, [active], ttl=t_active)
+    pct, _ = worst(use.get(active)) if isinstance(use.get(active), dict) else (0, None)
+    if pct >= conf["warn_at"]:   # an alternative is about to matter
+        use.update(core.usage(st, [n for n in st["accounts"] if n != active], ttl=t_others))
+    else:
+        use.update({n: (core._cache().get(n) or {}).get("usage") for n in st["accounts"] if n != active})
+    if isinstance(use.get(active), dict) and use[active].get("stale") and state.get("stale") != use[active]["stale"]:
+        log(f"{active}: using its last known numbers ({use[active]['stale']})")
+    state["stale"] = use[active].get("stale") if isinstance(use.get(active), dict) else None
     action, alt = decide(st, use, conf, warned)
     u = use.get(active) if isinstance(use.get(active), dict) else {}
     pct, window = worst(u) if u else (0, None)
@@ -108,8 +135,9 @@ def tick(warned):
     _, clock = core.resets_in(u.get(window, {}).get("resets_at") if window else None)
     if action == "switch":
         if not switch_to(st, alt, f"{active} at {pct}% of its {label} limit"):
-            return conf["check_every"]
-        a5 = use[alt].get("five_hour", {}).get("pct", 0)
+            return 20   # Claude was renewing the login, or similar: soon again
+        state["near"] = False
+        a5 = core.effective(use[alt]).get("five_hour", 0)
         notify(f"Claude: switched to {alt}", f"{active} reached its {label} limit (it resets {clock}).\n"
                f"Every Claude session uses {alt} ({a5}% used) from its next message.")
     elif action == "full":
@@ -117,7 +145,7 @@ def tick(warned):
         notify(f"Claude: {active} reached its {label} limit", f"It resets {clock}; {msg}.", "critical")
     elif action == "warn":
         if alt:
-            a5 = use[alt].get("five_hour", {}).get("pct", 0)
+            a5 = core.effective(use[alt]).get("five_hour", 0)
 
             def ask():
                 if notify(f"Claude: {active} at {pct}% of its {label} limit", f"Switch new sessions to {alt} ({a5}% used)?",
@@ -129,20 +157,26 @@ def tick(warned):
         else:
             notify(f"Claude: {active} at {pct}% of its {label} limit", f"It resets {clock}.")
     near = pct >= conf["warn_at"]
+    state["near"] = near
     return min(conf["check_every"], 60) if near else conf["check_every"]
 
 
 def run():
     log("watcher started")
+    signal.signal(signal.SIGUSR1, lambda *_: WAKE.set())
+    os.makedirs(core.CACHE, exist_ok=True)
+    with open(PID, "w") as f:
+        f.write(str(os.getpid()))
     try:
         with open(WARNED) as f:
             warned = {n: (k, tuple(r)) for n, (k, r) in json.load(f).items()}
     except (OSError, ValueError, TypeError):
         warned = {}
+    state = {}
     while True:
         try:
             before = dict(warned)
-            delay = tick(warned)
+            delay = tick(warned, state)
             if warned != before:
                 with open(WARNED + ".tmp", "w") as f:
                     json.dump(warned, f)
@@ -150,7 +184,8 @@ def run():
         except Exception as e:   # the watcher must never die on a bad answer
             log(f"error: {e!r}")
             delay = 300
-        time.sleep(delay)
+        WAKE.wait(delay)
+        WAKE.clear()
 
 
 if __name__ == "__main__":

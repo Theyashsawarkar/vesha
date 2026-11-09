@@ -130,7 +130,7 @@ vesha doctor                   # checks all of it
 ```
 
 Then `vesha` opens the switcher, and `vesha switch work` or `vesha switch`
-(the next account) switches from the command line.
+(the next account that isn't paused) switches from the command line.
 
 <p align="center">
   <img alt="vesha usage lists every account's 5-hour and weekly usage with bars and reset times; vesha which says the account a new claude would use here, and why; vesha switch work makes work the active account" src="assets/screenshots/cli.png" width="84%">
@@ -214,7 +214,7 @@ Every command has `--help` with examples; `vesha help` lists them all.
 | Command | Does |
 | --- | --- |
 | `vesha` | The switcher (without a terminal: the account list) |
-| `vesha switch [name]` | Make an account the active one; no name: the next one (`sw`, `s`) |
+| `vesha switch [name]` | Make an account the active one; no name: the next one that isn't paused (`sw`, `s`) |
 | `vesha list` | Every account: plan, usage, which is active (`ls`, `status`) |
 | `vesha usage` | Both limits of every account, with reset times (`u`) |
 | `vesha which` | The account a new claude would use here, and why (`w`) |
@@ -240,21 +240,33 @@ Options: `-y` don't ask, `--json` (list, usage, which), `--no-color`
 ## Automatic switching
 
 `vesha service install` starts `vesha.service`, a systemd user unit that
-checks the active account's usage every two minutes (every minute once
-it's close):
+watches the active account's 5-hour and weekly usage, and points Claude
+Code's status line at `vesha feed` (whatever status line you had still
+shows: vesha prints it after taking what it needs):
 
 - At **85%** of either limit it notifies you once per window, with a
   **Switch to …** button naming the account with the most room.
-- At **98%** it switches the active account to that account and tells you
+- At **95%** it switches the active account to that account and tells you
   which one, and when the old one resets. Every `claude` uses it from its
   next message, the session that hit the limit included.
-- If every account is at its limit, it tells you when the first one resets.
+- If every account is near its limit, it tells you when the first one resets.
+
+**Where the numbers come from.** After every reply Claude Code hands its
+status line the limits it got back from the API; `vesha feed` keeps them
+as that account's usage and wakes the watcher the moment they near a
+limit. So the watcher sees each message's usage as it happens, with no
+request of its own. Claude Code's usage endpoint is asked only for
+numbers the status line can't give (an account no session is using) or
+that are older than a few minutes, and when it answers 429 vesha backs
+off (1, 2, 4 ... up to 15 minutes) instead of asking again. Old numbers
+still count: usage only grows inside a window, so a last known 100% that
+hasn't reset yet still switches.
 
 "Most room" means the lowest of each account's worse window (a 5-hour
-limit at 20% doesn't help if the week is at 95%). Paused accounts, and
-accounts whose usage couldn't be checked, are never picked. `vesha auto
-off` keeps the warnings and stops the switching; the log is
-`~/.local/state/vesha/watch.log`.
+limit at 20% doesn't help if the week is at 95%); a window whose reset
+time has passed counts as empty. Paused accounts and accounts near their
+own limit are never picked. `vesha auto off` keeps the warnings and stops
+the switching; the log is `~/.local/state/vesha/watch.log`.
 
 ## Which account a new claude uses
 
@@ -275,7 +287,7 @@ account.
 
 ```toml
 warn_at = 85         # notify at this % of either limit
-switch_at = 98       # switch the active account at this %
+switch_at = 95       # switch the active account at this %
 auto = true          # switch automatically (else only notify)
 share_history = true # every account shares conversations, todos, plans
 usage_ttl = 180      # seconds to reuse fetched usage

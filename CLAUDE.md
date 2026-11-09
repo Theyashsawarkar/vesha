@@ -9,7 +9,8 @@ wrapper; a watcher switches at the usage limit. Its own repo, pulled into Vayu
 it must work without Vayu.
 
 - `bin/vesha` entry; `vesha/cli.py` commands; `vesha/core.py` accounts,
-  resolution, usage, tokens, wrapper; `vesha/watch.py` watcher;
+  resolution, usage, tokens, wrapper, the status line feed (`vesha feed`,
+  ADR 11: live limits from Claude Code); `vesha/watch.py` watcher;
   `vesha/tui.py` switcher; `vesha/ui.py` output helpers.
 - **Never print, log or copy a token**, and never refresh one while Claude
   runs on that profile (ADR 3). Keep real emails out of output you show,

@@ -12,7 +12,7 @@ from .ui import c
 
 COMMANDS = {
     "switch": dict(group="Switch", aliases=["sw", "s"], args="[<account>] [--force]",
-                   summary="Make an account the active one (no name: the next one)",
+                   summary="Make an account the active one (no name: the next one that isn't paused)",
                    description="Moves the account's login into ~/.claude, so every claude uses it: sessions already "
                                "running from their next message, new ones in any folder (unless this terminal or a "
                                "folder rule says otherwise). The login that was there moves to its own profile; nothing "
@@ -275,9 +275,9 @@ def cmd_switch(ctx):
         name = ctx.args[0]
         need(st, name)
     else:
-        names = list(st["accounts"])
-        i = names.index(st["default"]) if st["default"] in names else -1
-        name = names[(i + 1) % len(names)]
+        name = core.next_account(st)
+        if not name:
+            raise VeshaError("every other account is paused: name the one you want (vesha switch <name>)")
     old = core.activate(st, name, force="--force" in ctx.flags)
     notify_bar()
     a = st["accounts"][name]
@@ -582,6 +582,34 @@ def self_path():
     return onpath if os.path.realpath(onpath) == here else here
 
 
+def vesha_cmd():
+    """How Claude Code (or systemd) should run this vesha."""
+    import shlex
+    return f"{shlex.quote(sys.executable)} -I {shlex.quote(self_path())}"
+
+
+def cmd_feed():
+    """Claude Code's status line (internal): records the limits Claude got
+    with its last reply (core.feed), wakes the watcher when they are near a
+    limit, then prints the status line that was there before, if any. It
+    must never fail or slow the status line down."""
+    raw = sys.stdin.read()
+    try:
+        got = core.feed(json.loads(raw))
+        if got:
+            conf = core.config()
+            if max(core.effective(got[1]).values(), default=0) >= conf["warn_at"]:
+                core.wake_watcher()
+    except Exception:   # a bad answer must not break the status line
+        pass
+    inner = core.statusline_inner()
+    if inner:
+        r = subprocess.run(inner, shell=True, input=raw, text=True, stdout=subprocess.PIPE, timeout=10)
+        sys.stdout.write(r.stdout)
+        return r.returncode
+    return 0
+
+
 def cmd_install_shim(ctx):
     link = core.install_shim(self_path())
     ui.ok(f"installed {c(link.replace(core.HOME, '~'), 'sky')}: plain `claude` now follows the active account")
@@ -627,6 +655,8 @@ def cmd_service(ctx):
     if what == "install":
         os.makedirs(os.path.dirname(unit), exist_ok=True)
         open(unit, "w").write(UNIT.format(python=sys.executable, vesha=self_path()))
+        core.install_statusline(vesha_cmd())
+        ui.ok("Claude Code's status line feeds vesha the live limits (whatever it showed before, it still shows)")
         subprocess.run(["systemctl", "--user", "daemon-reload"])
         subprocess.run(["systemctl", "--user", "enable", "--now", "vesha.service"], capture_output=True)
         subprocess.run(["systemctl", "--user", "restart", "vesha.service"], capture_output=True)
@@ -636,6 +666,7 @@ def cmd_service(ctx):
             ui.err("the watcher didn't start: journalctl --user -u vesha")
     elif what == "remove":
         subprocess.run(["systemctl", "--user", "disable", "--now", "vesha.service"], capture_output=True)
+        core.uninstall_statusline()
         if os.path.exists(unit):
             os.remove(unit)
         subprocess.run(["systemctl", "--user", "daemon-reload"])
@@ -726,6 +757,12 @@ def cmd_doctor(ctx):
         (ui.ok("the watcher is running (automatic switching on)") if service_active()
          else (ui.warn("automatic switching is on but the watcher isn't running: vesha service install"), None)[1])
         problems += 0 if service_active() else 1
+        if core.statusline_installed():
+            ui.ok("Claude Code's status line feeds vesha the live limits")
+        else:
+            ui.warn("the status line doesn't feed vesha (vesha service install): it has to ask the usage endpoint, "
+                    "which rate-limits")
+            problems += 1
     logins = core.login_problems(st)
     for n, a in st["accounts"].items():
         d = core.profile_dir(st, n)
@@ -771,21 +808,21 @@ def cmd_waybar(ctx):
             st = core.load()
             name = st["default"]
             if name and len(st["accounts"]) > 1:
-                u = core.usage(st, [name]).get(name)
+                u = core.usage(st, [name], ttl=300).get(name)
                 h = u.get("five_hour", {}) if isinstance(u, dict) else {}
                 p = h.get("pct")
                 _, clock = core.resets_in(h.get("resets_at"))
                 conf = core.config()
                 cls = "unknown" if p is None else "full" if p >= conf["switch_at"] else "warn" if p >= conf["warn_at"] else "ok"
                 lines = [f"Claude: {name}  ({st['accounts'][name].get('email', '')})"]
-                use_all = core.usage(st)
+                use_all = core.usage(st, ttl=900)   # the watcher and the status line keep these fresh
                 for n in st["accounts"]:
                     un = use_all.get(n)
                     if isinstance(un, dict) and "five_hour" in un:
                         _, c5 = core.resets_in(un["five_hour"].get("resets_at"))
                         lines.append(f"{'●' if n == name else '○'} {n}: 5h {un['five_hour']['pct']}% (resets {c5})"
                                      + (f" · week {un['seven_day']['pct']}%" if "seven_day" in un else ""))
-                lines += ["", "Click: the switcher · Scroll: the next account"]
+                lines += ["", "Click: the switcher · Scroll: the next account (paused ones skipped)"]
                 out = {"text": f"{name} {p}%" if p is not None else name, "class": cls, "tooltip": "\n".join(lines),
                        "percentage": p or 0, "alt": cls}
         except Exception as e:
@@ -818,6 +855,8 @@ def main(argv):
         except VeshaError as e:
             sys.stderr.write(f"vesha: {e}\n")
             return 127
+    if argv and argv[0] == "feed":   # Claude Code's status line: as fast and quiet as possible
+        return cmd_feed()
     if not argv:
         if not sys.stdout.isatty():
             return HANDLERS["list"](Ctx([])) or 0

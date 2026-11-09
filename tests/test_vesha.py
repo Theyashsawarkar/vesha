@@ -71,10 +71,124 @@ class AutoSwitch(unittest.TestCase):
     def test_quiet_below_warning(self):
         self.assertEqual(watch.decide(st(), use(work=(40, 40), personal=(5, 5)), CONF, {}), ("ok", None))
 
-    def test_stale_numbers_never_switch(self):
+    def test_last_known_numbers_still_switch(self):
+        # the usage endpoint said 429: the last 100% hasn't reset, so it's still true
         u = use(work=(100, 10), personal=(5, 5))
-        u["work"]["stale"] = "offline"
+        u["work"]["stale"] = "asked too often"
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("switch", "personal"))
+
+    def test_a_window_that_has_reset_counts_as_empty(self):
+        u = use(work=(100, 10), personal=(5, 5))
+        u["work"]["five_hour"]["resets_at"] = "2000-01-01T00:00:00Z"
         self.assertEqual(watch.decide(st(), u, CONF, {}), ("ok", None))
+        u = use(work=(99, 10), personal=(100, 5))
+        u["personal"]["five_hour"]["resets_at"] = "2000-01-01T00:00:00Z"   # full once, reset since
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("switch", "personal"))
+
+    def test_near_the_limit_is_enough(self):
+        self.assertEqual(watch.decide(st(), use(work=(95, 10), personal=(5, 5)), CONF, {}), ("switch", "personal"))
+
+    def test_fresh_numbers_win_a_tie(self):
+        s = st(work=False, personal=False, client=False)
+        u = use(work=(99, 10), personal=(20, 20), client=(20, 20))
+        u["client"]["stale"] = "offline"
+        self.assertEqual(watch.decide(s, u, CONF, {}), ("switch", "personal"))
+
+
+class NextAccount(unittest.TestCase):
+    def test_skips_paused_and_wraps(self):
+        s = st("yash", ritesh=False, yash=False, rahul=True)
+        self.assertEqual(core.next_account(s), "ritesh")
+        s = st("ritesh", ritesh=False, yash=False, rahul=True)
+        self.assertEqual(core.next_account(s), "yash")
+        self.assertIsNone(core.next_account(st("yash", yash=False, rahul=True)))
+
+
+class Live(unittest.TestCase):
+    """The status line feed and the shared cache, in a throwaway home."""
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        cache, data, main = (os.path.join(self.root, x) for x in ("cache", "state", ".claude"))
+        os.makedirs(main)
+        self.patches = [mock.patch.multiple(core, CACHE=cache, LIVE=os.path.join(cache, "live.json"), DATA=data,
+                                            STATE=os.path.join(data, "accounts.json"), PROFILES=os.path.join(data, "profiles"),
+                                            MAIN_DIR=main, SETTINGS=os.path.join(main, "settings.json"),
+                                            INNER=os.path.join(data, "statusline.json"), LEGACY=os.path.join(self.root, "x")),
+                        mock.patch.object(core, "config", lambda: CONF)]
+        for p in self.patches:
+            p.start()
+        core.save({"default": "work", "folders": {}, "accounts": {"work": {"main": True}, "personal": {"plan": "Pro"}}})
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+
+    def line(self, h, w, wk_reset=4102444800, sid="s1"):
+        return {"session_id": sid, "rate_limits": {"five_hour": {"used_percentage": h, "resets_at": 4102444800},
+                                                   "seven_day": {"used_percentage": w, "resets_at": wk_reset}}}
+
+    def test_records_the_active_accounts_limits(self):
+        self.assertEqual(core.feed(self.line(42.4, 10), env={})[0], "work")
+        self.assertEqual(core._cache()["work"]["usage"]["five_hour"]["pct"], 42)
+        self.assertEqual(core.feed({"session_id": "s1"}, env={}), None)   # no limits yet: nothing
+
+    def test_a_profile_session_is_its_own_account(self):
+        env = {"CLAUDE_CONFIG_DIR": os.path.join(core.PROFILES, "personal")}
+        self.assertEqual(core.feed(self.line(7, 7), env=env)[0], "personal")
+
+    def test_old_numbers_after_a_switch_are_ignored(self):
+        core.feed(self.line(99, 10), env={})
+        s = core.load()
+        s["accounts"]["work"]["main"], s["accounts"]["personal"]["main"] = False, True
+        s["default"], s["switched_at"] = "personal", time.time() + 1
+        core.save(s)
+        self.assertIsNone(core.feed(self.line(99, 10), env={}))   # same session, nothing new yet
+        self.assertEqual(core.feed(self.line(3, 20), env={})[0], "personal")   # its next reply
+
+    def test_another_accounts_week_is_ignored(self):
+        core._update_cache({"work": {"usage": {"seven_day": {"pct": 99, "resets_at": core._iso(4102444800)}}, "at": 1},
+                            "personal": {"usage": {"seven_day": {"pct": 5, "resets_at": core._iso(4102000000)}}, "at": 1}})
+        s = core.load()
+        s["accounts"]["work"]["main"], s["accounts"]["personal"]["main"] = False, True
+        s["default"] = "personal"
+        core.save(s)
+        self.assertIsNone(core.feed(self.line(99, 99, sid="new"), env={}))
+        self.assertEqual(core.feed(self.line(1, 5, wk_reset=4102000000, sid="new"), env={})[0], "personal")
+
+    def test_cache_writers_keep_the_newest(self):
+        core._update_cache({"work": {"usage": {"x": 1}, "at": 200}})
+        core._update_cache({"work": {"usage": {"x": 0}, "at": 100}, "personal": {"usage": {}, "at": 5}})
+        c = core._cache()
+        self.assertEqual(c["work"]["usage"], {"x": 1})
+        self.assertIn("personal", c)
+
+    def test_a_429_backs_off_instead_of_asking_again(self):
+        core._update_cache({"work": {"usage": {"five_hour": {"pct": 100, "resets_at": None}}, "at": 1}})
+        calls = []
+
+        def limited(d):
+            calls.append(d)
+            raise core.RateLimited("asked too often")
+        with mock.patch.object(core, "fetch_usage", limited):
+            u = core.usage(core.load(), ["work"], fresh=True)["work"]
+            self.assertEqual(u["five_hour"]["pct"], 100)
+            self.assertTrue(u["stale"])
+            core.usage(core.load(), ["work"], fresh=True)
+        self.assertEqual(len(calls), 1)
+        self.assertGreater(core._cache()["work"]["retry_at"], time.time() + 30)
+
+    def test_status_line_install_keeps_and_restores_the_old_one(self):
+        with open(core.SETTINGS, "w") as f:
+            f.write('{"model": "x", "statusLine": {"type": "command", "command": "echo hi; date | cat", "padding": 0}}')
+        core.install_statusline("/usr/bin/python3 -I /x/vesha")
+        core.install_statusline("/usr/bin/python3 -I /x/vesha")   # twice: still wraps the original
+        self.assertTrue(core.statusline_installed())
+        self.assertEqual(core.statusline_inner(), "echo hi; date | cat")
+        core.uninstall_statusline()
+        import json
+        with open(core.SETTINGS) as f:
+            self.assertEqual(json.load(f), {"model": "x", "statusLine": {"type": "command", "command": "echo hi; date | cat",
+                                                                         "padding": 0}})
 
 
 class Resolve(unittest.TestCase):

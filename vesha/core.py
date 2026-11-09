@@ -11,6 +11,7 @@ Your shared setup (CLAUDE.md, settings, skills, plugins, agents, commands,
 and, by default, conversation history) is linked from ~/.claude into every
 other profile, so each account behaves the same.
 """
+import fcntl
 import json
 import os
 import re
@@ -44,12 +45,16 @@ UA = "vesha/0.1 (+https://github.com/Theyashsawarkar/vesha)"
 SHARED = ["CLAUDE.md", "settings.json", "skills", "plugins", "agents", "commands", "output-styles", "keybindings.json"]
 HISTORY = ["projects", "history.jsonl", "todos", "file-history", "plans"]
 
-DEFAULTS = {"warn_at": 85, "switch_at": 98, "auto": True, "share_history": True, "usage_ttl": 180, "check_every": 120}
+DEFAULTS = {"warn_at": 85, "switch_at": 95, "auto": True, "share_history": True, "usage_ttl": 180, "check_every": 120}
 NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 
 
 class VeshaError(Exception):
     pass
+
+
+class RateLimited(VeshaError):
+    """The usage endpoint said 429: ask that account again only after a while."""
 
 
 def config():
@@ -248,6 +253,7 @@ def activate(st, name, force=False):
         shutil.rmtree(src, ignore_errors=True)
         accs[name]["main"] = True
         st["default"] = name
+        st["switched_at"] = time.time()
         save(st)
         return None
     # Claude renews a token by rewriting ~/.claude's file: don't swap in the
@@ -283,6 +289,7 @@ def activate(st, name, force=False):
     accs[main]["main"] = False
     accs[name]["main"] = True
     st["default"] = name
+    st["switched_at"] = time.time()   # the live feed ignores the old login's numbers after this
     save(st)
     # 3. a claude that was renewing the old token as we swapped would have
     #    written it over the new login: put things right if so
@@ -538,12 +545,30 @@ def _cache():
         return {}
 
 
-def _save_cache(c):
+def _update_cache(entries):
+    """Merges {name: entry} into the usage cache, the newer entry (by "at")
+    winning for each account. Locked, and re-read under the lock, so the
+    watcher, the bar, the switcher and every session's status line can all
+    write without undoing each other."""
     os.makedirs(CACHE, exist_ok=True)
-    tmp = os.path.join(CACHE, "usage.json.tmp")
-    with open(tmp, "w") as f:
-        json.dump(c, f)
-    os.replace(tmp, os.path.join(CACHE, "usage.json"))
+    with open(os.path.join(CACHE, "usage.lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        c = _cache()
+        for n, e in entries.items():
+            old = c.get(n) or {}
+            if e.get("at", 0) >= old.get("at", 0):
+                c[n] = e
+            elif "retry_at" in e:   # an older answer still carries news of a 429
+                old["retry_at"], old["fails"] = e["retry_at"], e.get("fails", 1)
+        tmp = os.path.join(CACHE, f"usage.json.{os.getpid()}.tmp")
+        with open(tmp, "w") as f:
+            json.dump(c, f)
+        os.replace(tmp, os.path.join(CACHE, "usage.json"))
+        return c
+
+
+def _save_cache(c):
+    _update_cache(c)
 
 
 def _refresh(d, cred):
@@ -592,7 +617,7 @@ def fetch_usage(d):
         if e.code == 401:
             raise VeshaError("login expired: sign in again") from None
         if e.code == 429:
-            raise VeshaError("asked too often: try again in a minute") from None
+            raise RateLimited("asked too often: try again in a minute") from None
         raise VeshaError(f"usage unavailable ({e.code})") from None
     except (urllib.error.URLError, TimeoutError) as e:
         raise VeshaError("offline") from e
@@ -604,17 +629,21 @@ def fetch_usage(d):
     return out
 
 
-def usage(st, names=None, fresh=False, on_start=None, on_done=None):
-    """{name: usage dict or VeshaError}, cached for usage_ttl seconds."""
+def usage(st, names=None, fresh=False, on_start=None, on_done=None, ttl=None):
+    """{name: usage dict or VeshaError}, cached for ttl (usage_ttl) seconds.
+    An account the endpoint rate-limited isn't asked again until its backoff
+    ends (1, 2, 4... up to 15 minutes), even with fresh: its last numbers come
+    back marked stale instead, since asking again only extends the limit."""
     import concurrent.futures
     names = list(names or st["accounts"])
-    ttl = config()["usage_ttl"]
+    ttl = config()["usage_ttl"] if ttl is None else ttl
     cache = _cache()
+    now = time.time()
     out, ask = {}, []
     for n in names:
         hit = cache.get(n)
-        if not fresh and hit and time.time() - hit.get("at", 0) < ttl:
-            out[n] = hit["usage"]
+        if hit and "usage" in hit and (not fresh and now - hit.get("at", 0) < ttl or now < hit.get("retry_at", 0)):
+            out[n] = hit["usage"] if now - hit.get("at", 0) < ttl else dict(hit["usage"], stale="asked too often: waiting")
             if on_done:
                 on_done(n, out[n], True)
         else:
@@ -625,20 +654,49 @@ def usage(st, names=None, fresh=False, on_start=None, on_done=None):
             on_start(n)
         return fetch_usage(profile_dir(st, n))
     if ask:
+        new = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
             futs = {ex.submit(one, n): n for n in ask}
             for f in concurrent.futures.as_completed(futs):
                 n = futs[f]
                 try:
                     out[n] = f.result()
-                    cache[n] = {"usage": out[n], "at": time.time()}
+                    new[n] = {"usage": out[n], "at": time.time()}
                 except Exception as e:
                     out[n] = e if isinstance(e, VeshaError) else VeshaError(str(e))
-                    if cache.get(n):   # show the last known numbers, marked stale
-                        out[n] = dict(cache[n]["usage"], stale=str(out[n]))
+                    hit = cache.get(n) or {}
+                    if isinstance(e, RateLimited):
+                        fails = hit.get("fails", 0) + 1
+                        new[n] = dict(hit, retry_at=time.time() + min(900, 60 * 2 ** (fails - 1)), fails=fails)
+                    if hit.get("usage"):   # show the last known numbers, marked stale
+                        out[n] = dict(hit["usage"], stale=str(out[n]))
                 if on_done:
                     on_done(n, out[n], False)
-        _save_cache(cache)
+        if new:
+            _update_cache(new)
+    return out
+
+
+def _epoch(iso):
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except (AttributeError, ValueError):
+        return None
+
+
+def effective(u, now=None):
+    """An account's usage as far as it can be known: {window: pct}. Usage only
+    grows inside a window, so old (stale) numbers are still true lower bounds
+    until their window resets; a window whose reset time has passed counts
+    as empty."""
+    now = now or time.time()
+    out = {}
+    for k in ("five_hour", "seven_day"):
+        w = u.get(k) if isinstance(u, dict) else None
+        if isinstance(w, dict) and w.get("pct") is not None:
+            r = _epoch(w.get("resets_at"))
+            out[k] = 0 if r is not None and r <= now else w["pct"]
     return out
 
 
@@ -675,18 +733,202 @@ def resets_in(iso):
 
 def best_alternative(st, use, exclude):
     """The unpaused account with the most room left (judged by the fuller of
-    its 5-hour and weekly windows), other than exclude."""
+    its 5-hour and weekly windows), other than exclude; None if every one is
+    near its limit too. Last known numbers count (they are lower bounds), but
+    an account with fresh ones wins a tie."""
+    limit = config()["switch_at"]
     cands = []
     for n, a in st["accounts"].items():
         u = use.get(n)
-        if n == exclude or a.get("paused") or not isinstance(u, dict) or "five_hour" not in u or u.get("stale"):
+        if n == exclude or a.get("paused") or not isinstance(u, dict):
             continue
-        limit = config()["switch_at"]
-        if u["five_hour"]["pct"] >= limit or u.get("seven_day", {}).get("pct", 0) >= limit:
+        e = effective(u)
+        if "five_hour" not in e and "seven_day" not in e:
+            continue
+        worst = max(e.values())
+        if worst >= limit:
             continue   # no room there either
-        h5, wk = u["five_hour"]["pct"], u.get("seven_day", {}).get("pct", 0)
-        cands.append((max(h5, wk), h5, n))   # the most room in its fuller window
-    return min(cands)[2] if cands else None
+        cands.append((worst, bool(u.get("stale")), e.get("five_hour", 0), n))
+    return min(cands)[3] if cands else None
+
+
+def next_account(st):
+    """The account after the active one, skipping paused ones (`vesha switch`
+    with no name, the bar's scroll): None if every other one is paused."""
+    names = list(st["accounts"])
+    i = names.index(st["default"]) if st["default"] in names else -1
+    for k in range(1, len(names) + 1):
+        n = names[(i + k) % len(names)]
+        if n != st["default"] and not st["accounts"][n].get("paused"):
+            return n
+    return None
+
+
+# ===================================================================== live usage
+LIVE = os.path.join(CACHE, "live.json")
+
+
+def _iso(epoch):
+    from datetime import UTC, datetime
+    return datetime.fromtimestamp(epoch, UTC).isoformat() if epoch else None
+
+
+def feed(data, env=None):
+    """Takes what Claude Code gives its status line (on stdin, after every
+    reply) and keeps its rate_limits as that account's usage: live numbers,
+    with no request of our own. Returns (account, usage) when it recorded
+    something new, else None.
+
+    A session in ~/.claude follows the active account, so right after a
+    switch its status line still shows the old login's numbers until its
+    next reply. Those are told apart two ways: the session's numbers haven't
+    changed since before the switch, or their weekly reset time is another
+    account's and not this one's."""
+    env = os.environ if env is None else env
+    rl = data.get("rate_limits") if isinstance(data, dict) else None
+    if not isinstance(rl, dict):
+        return None
+    u = {}
+    for k in ("five_hour", "seven_day"):
+        w = rl.get(k)
+        if isinstance(w, dict) and w.get("used_percentage") is not None:
+            u[k] = {"pct": round(float(w["used_percentage"])), "resets_at": _iso(w.get("resets_at"))}
+    if not u:
+        return None
+    st = load()
+    d = os.path.realpath(env.get("CLAUDE_CONFIG_DIR") or MAIN_DIR)
+    name = next((n for n in st["accounts"] if os.path.realpath(profile_dir(st, n)) == d), None)
+    if not name:
+        return None
+    sig = json.dumps(u, sort_keys=True)
+    sid = str(data.get("session_id") or "")
+    now = time.time()
+    cache = _cache()
+    os.makedirs(CACHE, exist_ok=True)
+    with open(os.path.join(CACHE, "live.lock"), "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            with open(LIVE) as f:
+                live = json.load(f)
+        except (OSError, ValueError):
+            live = {}
+        sessions = {k: v for k, v in live.get("sessions", {}).items() if now - v.get("at", 0) < 2 * 86400}
+        prev = sessions.get(sid)
+        old = False
+        if d == os.path.realpath(MAIN_DIR):
+            switched = st.get("switched_at", 0)
+            if prev and prev.get("at", 0) < switched and prev.get("sig") == sig:
+                old = True   # nothing new since the switch: the old login's numbers
+            wk = _wid(u.get("seven_day", {}).get("resets_at"))
+            if wk is not None:
+                mine = _wid(((cache.get(name) or {}).get("usage") or {}).get("seven_day", {}).get("resets_at"))
+                others = {_wid(((cache.get(n) or {}).get("usage") or {}).get("seven_day", {}).get("resets_at"))
+                          for n in st["accounts"] if n != name}
+                if mine is not None and wk != mine and wk in others:
+                    old = True   # another account's week, not this one's
+        if old or (prev and prev.get("sig") == sig and prev.get("account") == name and now - prev.get("at", 0) < 60):
+            return None   # old numbers, or ones this session just gave
+        sessions[sid] = {"sig": sig, "at": now, "account": name}
+        live["sessions"] = sessions
+        tmp = LIVE + f".{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
+            json.dump(live, f)
+        os.replace(tmp, LIVE)
+    hit = cache.get(name) or {}
+    if json.dumps(hit.get("usage", {}), sort_keys=True) == sig and now - hit.get("at", 0) < 30:
+        return None   # nothing new, written moments ago
+    _update_cache({name: {"usage": u, "at": now, "live": True}})
+    return name, u
+
+
+def _wid(iso):
+    """A limit window, by its reset time rounded to 10 minutes (the API's
+    resets_at jitters by up to a second between answers)."""
+    e = _epoch(iso) if iso else None
+    return round(e / 600) if e else None
+
+
+def wake_watcher():
+    """Asks the watcher to look now (SIGUSR1), instead of at its next tick."""
+    import signal
+    try:
+        with open(os.path.join(CACHE, "watch.pid")) as f:
+            os.kill(int(f.read().strip()), signal.SIGUSR1)
+    except (OSError, ValueError):
+        pass
+
+
+# ===================================================================== status line
+SETTINGS = os.path.join(MAIN_DIR, "settings.json")
+
+
+INNER = os.path.join(DATA, "statusline.json")   # the status line vesha's feed stands in front of
+
+
+def statusline_inner():
+    """The status line command that was there before vesha's, if any."""
+    try:
+        with open(INNER) as f:
+            return json.load(f).get("command") or None
+    except (OSError, ValueError):
+        return None
+
+
+def statusline_installed():
+    try:
+        with open(SETTINGS) as f:
+            cmd = (json.load(f).get("statusLine") or {}).get("command") or ""
+    except (OSError, ValueError):
+        return False
+    return bool(re.search(r"\bvesha feed$", cmd))
+
+
+def install_statusline(vesha_cmd):
+    """Points Claude Code's status line at `vesha feed`, which records the
+    live limits and then prints whatever status line was there before
+    (nothing, if there was none). settings.json is shared into every
+    profile, so this covers every account."""
+    try:
+        with open(SETTINGS) as f:
+            settings = json.load(f)
+    except FileNotFoundError:
+        settings = {}
+    except ValueError as e:
+        raise VeshaError(f"~/.claude/settings.json isn't valid JSON ({e}): not touching it") from None
+    sl = settings.get("statusLine") or {}
+    if not statusline_installed():
+        inner = sl.get("command") if sl.get("type", "command") == "command" else None
+        os.makedirs(DATA, exist_ok=True)
+        write_private(INNER, {"command": inner, "padding": sl.get("padding")})
+    settings["statusLine"] = dict(sl, type="command", command=f"{vesha_cmd} feed")
+    _write_settings(settings)
+
+
+def uninstall_statusline():
+    if not statusline_installed():
+        return
+    with open(SETTINGS) as f:
+        settings = json.load(f)
+    inner = statusline_inner()
+    if inner:
+        settings["statusLine"]["command"] = inner
+    else:
+        settings.pop("statusLine", None)
+    _write_settings(settings)
+    try:
+        os.remove(INNER)
+    except OSError:
+        pass
+
+
+def _write_settings(settings):
+    path = os.path.realpath(SETTINGS)   # keep a symlink (dotfiles) a symlink
+    mode = os.stat(path).st_mode & 0o777 if os.path.exists(path) else 0o600
+    tmp = path + ".vesha-tmp"
+    with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode), "w") as f:
+        json.dump(settings, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
 
 
 # ===================================================================== claude-swap import

@@ -2,6 +2,33 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.5.0 -- 2026-11-09
+
+- Fixed: automatic switching stopped working when Claude Code's usage
+  endpoint answered 429 ("asked too often"). vesha then had only the active
+  account's last known numbers, and the watcher ignored those, so an
+  account at 100% stayed active. Old numbers now count: usage only grows
+  inside a window, so a last known 100% that hasn't reset is still true.
+- Live usage from Claude Code itself: `vesha service install` points the
+  status line at `vesha feed`, which takes the 5-hour and weekly limits
+  Claude got with each reply, keeps them as that account's usage, and wakes
+  the watcher at once near a limit. An existing status line keeps showing;
+  `vesha service remove` puts it back. Right after a switch, a session's
+  numbers from the old login are told apart and ignored.
+- Far fewer requests: the watcher asks the endpoint only for numbers older
+  than a minute (when close) or three, and other accounts' only near a
+  limit and at most every ten minutes; the bar reuses them. After a 429 an
+  account isn't asked again for 1, 2, 4 ... up to 15 minutes.
+- Switches at **95%** (was 98%), so the reply that crosses the line doesn't
+  hit the wall first. A window whose reset time has passed counts as empty
+  when choosing where to go; fresh numbers win a tie.
+- The usage cache is locked and merged, newest first, so the watcher, the
+  bar, the switcher and every status line can write it at once.
+- `vesha switch` with no name, and scrolling on the bar, skip paused
+  accounts, as automatic switching always has; naming one still goes there.
+- `vesha doctor` checks the status line feed; a switch that fails (Claude
+  renewing the login) is tried again after 20 seconds, not two minutes.
+
 ## v0.4.0 -- 2026-11-09
 
 - The switcher speaks the Space grammar every Vayu tool shares: normal and
