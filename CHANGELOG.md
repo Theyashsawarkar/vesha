@@ -2,6 +2,24 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## v0.6.0 -- 2026-11-16
+
+- With every account at its limit, the watcher now switches to the one whose
+  limit resets first (it used to stay on the active one and only say when
+  the first resets). An account frees up only when every full window has
+  reset, so a full week isn't hidden by a 5-hour window resetting soon.
+  Paused accounts, and ones whose reset time or usage is unknown, are never
+  picked; it switches only for a reset at least a minute sooner, so two
+  accounts resetting together don't swap back and forth. One notification
+  says it all, and the watcher looks again right as the reset happens.
+  With `auto` off it names the account that frees up first. ADR 12.
+- `vesha waybar --once` prints the current line and exits, for a bar that
+  starts after vesha (tmux after a reboot) and would otherwise wait for the
+  next change.
+- `vesha waybar` shows usage as it is now: a window that has reset reads 0%,
+  not its last 100%; the colour follows the fuller of the 5-hour and weekly
+  windows, and a nearly full week is shown as `week N%`.
+
 ## v0.5.0 -- 2026-11-09
 
 - Fixed: automatic switching stopped working when Claude Code's usage

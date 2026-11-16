@@ -76,21 +76,51 @@ def window_id(iso):
         return None
 
 
+def limit_key(u):
+    """The fullest window of an account and which one of it (by reset time):
+    what a warning is remembered by."""
+    pct, window = worst(u)
+    return (window, window_id(u.get(window, {}).get("resets_at"))) if window else None
+
+
+# Switch to an account that is full too only when it frees up at least this
+# much sooner: reset times jitter, and two accounts resetting together
+# mustn't make the watcher flip between them.
+SOONER = 60
+
+
+def first_free(st, use, conf, active):
+    """When every account is at its limit: the other account to wait on
+    instead of the active one, because its limit resets sooner; else None."""
+    other = core.earliest_free(st, use, active)
+    if not other:
+        return None
+    mine = core.free_at(use[active], conf["switch_at"])
+    return other[0] if mine is None or other[1] < mine - SOONER else None
+
+
 def decide(st, use, conf, warned):
     """What to do about the active account's usage: returns (action, info):
-    ("switch", alt) | ("full", alt-or-None) | ("warn", alt-or-None) | ("ok", None).
-    warned remembers what was already said for each limit window, so each
-    warning is shown once per window."""
+    ("switch", alt) | ("switch_first", alt) | ("full", alt-or-None) |
+    ("warn", alt-or-None) | ("ok", None). "switch_first": every account is at
+    its limit and alt's resets first, so it's the one to be on. warned
+    remembers what was already said for each limit window, so each warning
+    is shown once per window."""
     active = st["default"]
     u = use.get(active)
     if not active or len(st["accounts"]) < 2 or not isinstance(u, dict):
         return "ok", None
     pct, window = worst(u)
-    resets = (window, window_id(u.get(window, {}).get("resets_at"))) if window else None
+    resets = limit_key(u)
     alt = core.best_alternative(st, use, active)
     if pct >= conf["switch_at"]:
         if conf["auto"] and alt:
             return "switch", alt
+        if conf["auto"] and not alt:
+            first = first_free(st, use, conf, active)
+            if first:
+                warned[active] = ("full", resets)   # said in the switch's notification
+                return "switch_first", first
         if warned.get(active) == ("full", resets):
             return "ok", None
         warned[active] = ("full", resets)
@@ -140,8 +170,23 @@ def tick(warned, state):
         a5 = core.effective(use[alt]).get("five_hour", 0)
         notify(f"Claude: switched to {alt}", f"{active} reached its {label} limit (it resets {clock}).\n"
                f"Every Claude session uses {alt} ({a5}% used) from its next message.")
+    elif action == "switch_first":
+        if not switch_to(st, alt, f"every account at its limit; {alt} frees up first"):
+            return 20
+        state["near"] = True
+        _, alt_clock = core.resets_in(_iso_or_none(core.free_at(use[alt], conf["switch_at"])))
+        warned[alt] = ("full", limit_key(use[alt]))   # this notification says it; no second one
+        notify(f"Claude: every account is at its limit: switched to {alt}",
+               f"{alt} frees up first, {alt_clock} ({active}: {clock}).\n"
+               f"Every Claude session uses {alt} from its next message.", "critical")
     elif action == "full":
-        msg = f"{alt} has room: vesha switch {alt}" if alt else "every other account is at its limit too"
+        if alt:
+            msg = f"{alt} has room: vesha switch {alt}"
+        else:
+            first = core.earliest_free(st, use, active)
+            _, fclock = core.resets_in(_iso_or_none(first[1])) if first else ("", "")
+            msg = f"every other account is at its limit too; {first[0]} frees up first, {fclock}" if first \
+                else "every other account is at its limit too"
         notify(f"Claude: {active} reached its {label} limit", f"It resets {clock}; {msg}.", "critical")
     elif action == "warn":
         if alt:
@@ -156,9 +201,27 @@ def tick(warned, state):
             threading.Thread(target=ask, daemon=True).start()
         else:
             notify(f"Claude: {active} at {pct}% of its {label} limit", f"It resets {clock}.")
+    st = core.load()
+    u = use.get(st["default"]) if isinstance(use.get(st["default"]), dict) else {}
+    pct, _ = worst(u) if u else (0, None)
     near = pct >= conf["warn_at"]
     state["near"] = near
-    return min(conf["check_every"], 60) if near else conf["check_every"]
+    delay = min(conf["check_every"], 60) if near else conf["check_every"]
+    return min(delay, until_free(st, use, conf)) if pct >= conf["switch_at"] else delay
+
+
+def until_free(st, use, conf, now=None):
+    """Seconds until the first unpaused account's limit resets (a few
+    seconds after, so the reset has happened): when every account is full,
+    the watcher looks again right then instead of up to check_every later."""
+    now = now or time.time()
+    times = [t for n, a in st["accounts"].items() if not a.get("paused") and isinstance(use.get(n), dict)
+             for t in [core.free_at(use[n], conf["switch_at"], now)] if t is not None and t > now]
+    return max(5, min(times) - now + 5) if times else 3600
+
+
+def _iso_or_none(epoch):
+    return core._iso(epoch) if epoch else None
 
 
 def run():

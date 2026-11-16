@@ -249,7 +249,10 @@ shows: vesha prints it after taking what it needs):
 - At **95%** it switches the active account to that account and tells you
   which one, and when the old one resets. Every `claude` uses it from its
   next message, the session that hit the limit included.
-- If every account is near its limit, it tells you when the first one resets.
+- If every account is at its limit, it switches to the one whose limit
+  resets first (a full week counts: an account frees up only when every
+  full window has reset) and checks again right as it does, so Claude
+  works again at the earliest moment any account allows.
 
 **Where the numbers come from.** After every reply Claude Code hands its
 status line the limits it got back from the API; `vesha feed` keeps them
@@ -304,7 +307,8 @@ bind -N "Switch Claude Code account (vesha)" C display-popup -E -w 80% -h 70% ve
 
 **waybar**: the active account and its 5-hour usage, every account in the
 tooltip; click for the switcher, scroll to switch. `vesha waybar` keeps
-running and redraws the moment the account changes:
+running and redraws the moment the account changes (`vesha waybar --once`
+prints one line and exits, for a bar that starts later):
 
 ```jsonc
 "custom/vesha": {

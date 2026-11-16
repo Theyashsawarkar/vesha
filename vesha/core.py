@@ -752,6 +752,42 @@ def best_alternative(st, use, exclude):
     return min(cands)[3] if cands else None
 
 
+def free_at(u, limit, now=None):
+    """When an account has room again (epoch seconds): now when it already
+    has; else the latest reset among its windows at the limit (a full 5-hour
+    and full week free up only when both have reset); None when that can't
+    be known (no numbers, or a full window without a reset time)."""
+    now = now or time.time()
+    e = effective(u, now)
+    if not e:
+        return None
+    full = [k for k, p in e.items() if p >= limit]
+    if not full:
+        return now
+    resets = [_epoch(u[k].get("resets_at")) for k in full]
+    return None if None in resets else max(resets)
+
+
+def earliest_free(st, use, exclude, now=None):
+    """For when every account is at its limit: (name, epoch) of the unpaused
+    account, other than exclude, whose limit resets first; None when no
+    other account's reset time is known. A tie goes to the one with fresh
+    numbers, then the emptier 5-hour window."""
+    limit = config()["switch_at"]
+    cands = []
+    for n, a in st["accounts"].items():
+        u = use.get(n)
+        if n == exclude or a.get("paused") or not isinstance(u, dict):
+            continue
+        t = free_at(u, limit, now)
+        if t is not None:
+            cands.append((t, bool(u.get("stale")), effective(u, now).get("five_hour", 0), n))
+    if not cands:
+        return None
+    best = min(cands)
+    return best[3], best[0]
+
+
 def next_account(st):
     """The account after the active one, skipping paused ones (`vesha switch`
     with no name, the bar's scroll): None if every other one is paused."""

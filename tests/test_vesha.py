@@ -63,6 +63,7 @@ class AutoSwitch(unittest.TestCase):
         self.assertEqual(watch.decide(st(), u, CONF, warned), ("warn", None))
         u = use(work=(94, 10), personal=(100, 5))
         u["work"]["five_hour"]["resets_at"] = "2099-01-01T14:19:59.912907+00:00"
+        u["personal"]["five_hour"]["resets_at"] = "2099-01-02T00:00:00Z"   # frees up after work
         self.assertEqual(watch.decide(st(), u, CONF, warned), ("ok", None))
         u["work"]["five_hour"]["pct"] = 99   # reaching the limit is still said, once
         self.assertEqual(watch.decide(st(), u, CONF, warned), ("full", None))
@@ -93,6 +94,115 @@ class AutoSwitch(unittest.TestCase):
         u = use(work=(99, 10), personal=(20, 20), client=(20, 20))
         u["client"]["stale"] = "offline"
         self.assertEqual(watch.decide(s, u, CONF, {}), ("switch", "personal"))
+
+
+def resets(u, name, window, iso):
+    u[name][window]["resets_at"] = iso
+    return u
+
+
+class EveryAccountFull(unittest.TestCase):
+    """Every account at its limit: be on the one whose limit resets first."""
+    def setUp(self):
+        self.p = mock.patch.object(core, "config", lambda: CONF)
+        self.p.start()
+
+    def tearDown(self):
+        self.p.stop()
+
+    def test_switches_to_the_one_resetting_first(self):
+        s = st(work=False, personal=False, client=False)
+        u = use(work=(100, 10), personal=(100, 10), client=(99, 10))
+        resets(u, "work", "five_hour", "2099-01-01T20:00:00Z")
+        resets(u, "personal", "five_hour", "2099-01-01T18:00:00Z")
+        resets(u, "client", "five_hour", "2099-01-01T17:00:00Z")
+        warned = {}
+        self.assertEqual(watch.decide(s, u, CONF, warned), ("switch_first", "client"))
+        self.assertEqual(warned["work"][0], "full")   # no separate "reached its limit" for work
+
+    def test_stays_when_it_resets_first_itself(self):
+        u = use(work=(100, 10), personal=(100, 10))
+        resets(u, "work", "five_hour", "2099-01-01T17:00:00Z")
+        resets(u, "personal", "five_hour", "2099-01-01T18:00:00Z")
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("full", None))
+
+    def test_no_flipping_on_nearly_equal_resets(self):
+        u = use(work=(100, 10), personal=(100, 10))
+        resets(u, "work", "five_hour", "2099-01-01T17:00:30Z")
+        resets(u, "personal", "five_hour", "2099-01-01T17:00:00Z")
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("full", None))
+        s = st("personal")   # and back from the other side
+        self.assertEqual(watch.decide(s, u, CONF, {}), ("full", None))
+
+    def test_a_full_week_waits_for_the_week(self):
+        # personal's 5 hours reset soon, but its week is full for days
+        u = use(work=(100, 10), personal=(100, 100))
+        resets(u, "work", "five_hour", "2099-01-01T20:00:00Z")
+        resets(u, "personal", "five_hour", "2099-01-01T17:00:00Z")
+        resets(u, "personal", "seven_day", "2099-01-05T00:00:00Z")
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("full", None))
+        # and the other way round: work's week is full, personal's 5 hours free first
+        u = use(work=(10, 100), personal=(100, 10))
+        resets(u, "work", "seven_day", "2099-01-05T00:00:00Z")
+        resets(u, "personal", "five_hour", "2099-01-01T17:00:00Z")
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("switch_first", "personal"))
+
+    def test_unknown_reset_never_wins(self):
+        u = use(work=(100, 10), personal=(100, 10))
+        resets(u, "personal", "five_hour", None)
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("full", None))
+        # but an active account whose reset is unknown gives way to one that is known
+        u = use(work=(100, 10), personal=(100, 10))
+        resets(u, "work", "five_hour", None)
+        self.assertEqual(watch.decide(st(), u, CONF, {}), ("switch_first", "personal"))
+
+    def test_paused_and_unknown_accounts_are_skipped(self):
+        s = st(work=False, personal=True, client=False)
+        u = use(work=(100, 10), personal=(100, 10))
+        resets(u, "work", "five_hour", "2099-01-01T20:00:00Z")
+        resets(u, "personal", "five_hour", "2099-01-01T17:00:00Z")
+        u["client"] = core.VeshaError("login expired")
+        self.assertEqual(watch.decide(s, u, CONF, {}), ("full", None))
+
+    def test_auto_off_only_tells(self):
+        conf = dict(CONF, auto=False)
+        u = use(work=(100, 10), personal=(100, 10))
+        resets(u, "work", "five_hour", "2099-01-01T20:00:00Z")
+        resets(u, "personal", "five_hour", "2099-01-01T17:00:00Z")
+        self.assertEqual(watch.decide(st(), u, conf, {}), ("full", None))
+
+    def test_after_the_switch_it_settles(self):
+        # now on client, which resets first: no switch back, no second notification
+        s = st("client", work=False, client=False)
+        u = use(work=(100, 10), client=(100, 10))
+        resets(u, "work", "five_hour", "2099-01-01T20:00:00Z")
+        resets(u, "client", "five_hour", "2099-01-01T17:00:00Z")
+        warned = {"client": ("full", watch.limit_key(u["client"]))}
+        self.assertEqual(watch.decide(s, u, CONF, warned), ("ok", None))
+
+    def test_one_with_room_beats_one_resetting_first(self):
+        s = st(work=False, personal=False, client=False)
+        u = use(work=(100, 10), personal=(100, 10), client=(60, 10))
+        resets(u, "personal", "five_hour", "2099-01-01T00:01:00Z")
+        self.assertEqual(watch.decide(s, u, CONF, {}), ("switch", "client"))
+
+    def test_free_at(self):
+        now = core._epoch("2099-01-01T00:00:00Z")
+        u = use(a=(100, 100))["a"]
+        u["five_hour"]["resets_at"] = "2099-01-01T05:00:00Z"
+        u["seven_day"]["resets_at"] = "2099-01-03T00:00:00Z"
+        self.assertEqual(core.free_at(u, 95, now), core._epoch("2099-01-03T00:00:00Z"))
+        self.assertEqual(core.free_at(use(a=(5, 5))["a"], 95, now), now)
+        self.assertIsNone(core.free_at({}, 95, now))
+
+    def test_wakes_at_the_first_reset(self):
+        now = core._epoch("2099-01-01T00:00:00Z")
+        u = use(work=(100, 10), personal=(100, 10))
+        resets(u, "work", "five_hour", "2099-01-01T00:10:00Z")
+        resets(u, "personal", "five_hour", "2099-01-01T00:03:00Z")
+        self.assertEqual(watch.until_free(st(), u, CONF, now), 185)
+        s = st(work=False, personal=True)   # a paused account's reset doesn't matter
+        self.assertEqual(watch.until_free(s, u, CONF, now), 605)
 
 
 class NextAccount(unittest.TestCase):

@@ -90,8 +90,8 @@ COMMANDS = {
                  examples=["eval \"$(vesha init zsh)\"   # in ~/.zshrc"]),
     "doctor": dict(group="Setup", aliases=["check"], args="",
                    summary="Check every account, the wrapper and the watcher", examples=["vesha doctor"]),
-    "waybar": dict(group="Setup", aliases=[], args="", summary="JSON for a waybar module (the active account and its usage)",
-                   examples=["vesha waybar"]),
+    "waybar": dict(group="Setup", aliases=[], args="[--once]", summary="JSON for a waybar module (the active account and its usage)",
+                   examples=["vesha waybar", "vesha waybar --once   # one line, then exit"]),
     "help": dict(group="Help", aliases=[], args="[<command>]", summary="This overview, or one command in detail",
                  examples=["vesha help", "vesha help switch"]),
 }
@@ -796,11 +796,14 @@ def cmd_doctor(ctx):
 
 def cmd_waybar(ctx):
     """One JSON line per change: the active account and its 5-hour usage.
-    Redraws on SIGRTMIN+12 (sent by `vesha switch`) and every minute."""
+    Redraws on SIGRTMIN+12 (sent by `vesha switch`) and every minute.
+    --once prints the current line and exits (for a bar that starts later)."""
     import signal
     import threading
+    once = "--once" in ctx.flags
     ev = threading.Event()
-    signal.signal(signal.SIGRTMIN + 12, lambda *_: ev.set())
+    if not once:
+        signal.signal(signal.SIGRTMIN + 12, lambda *_: ev.set())
     last = None
     while True:
         out = {"text": "", "class": "none", "tooltip": ""}
@@ -809,11 +812,11 @@ def cmd_waybar(ctx):
             name = st["default"]
             if name and len(st["accounts"]) > 1:
                 u = core.usage(st, [name], ttl=300).get(name)
-                h = u.get("five_hour", {}) if isinstance(u, dict) else {}
-                p = h.get("pct")
-                _, clock = core.resets_in(h.get("resets_at"))
+                eff = core.effective(u) if isinstance(u, dict) else {}
+                p = eff.get("five_hour")   # a window that has reset reads 0, not its old 100
+                top = max(eff.values()) if eff else None   # the colour: the fuller of 5-hour and week
                 conf = core.config()
-                cls = "unknown" if p is None else "full" if p >= conf["switch_at"] else "warn" if p >= conf["warn_at"] else "ok"
+                cls = "unknown" if top is None else "full" if top >= conf["switch_at"] else "warn" if top >= conf["warn_at"] else "ok"
                 lines = [f"Claude: {name}  ({st['accounts'][name].get('email', '')})"]
                 use_all = core.usage(st, ttl=900)   # the watcher and the status line keep these fresh
                 for n in st["accounts"]:
@@ -823,7 +826,10 @@ def cmd_waybar(ctx):
                         lines.append(f"{'●' if n == name else '○'} {n}: 5h {un['five_hour']['pct']}% (resets {c5})"
                                      + (f" · week {un['seven_day']['pct']}%" if "seven_day" in un else ""))
                 lines += ["", "Click: the switcher · Scroll: the next account (paused ones skipped)"]
-                out = {"text": f"{name} {p}%" if p is not None else name, "class": cls, "tooltip": "\n".join(lines),
+                w = eff.get("seven_day")
+                text = f"{name} week {w}%" if w is not None and w >= conf["warn_at"] and w > (p or 0) \
+                    else f"{name} {p}%" if p is not None else name
+                out = {"text": text, "class": cls, "tooltip": "\n".join(lines),
                        "percentage": p or 0, "alt": cls}
         except Exception as e:
             out = {"text": "", "class": "error", "tooltip": str(e)}
@@ -834,6 +840,8 @@ def cmd_waybar(ctx):
             except BrokenPipeError:
                 return 0
             last = line
+        if once:
+            return 0
         ev.wait(60)
         ev.clear()
 
