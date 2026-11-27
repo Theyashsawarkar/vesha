@@ -4,6 +4,15 @@ Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`
 
 ## Unreleased
 
+- `vesha waybar --sources` prints the files the bar line comes from (the
+  accounts, the usage cache, the config), so a bar that already watches files
+  can run `vesha waybar --once` when one changes instead of keeping
+  `vesha waybar` running (about 18 MB less on a desktop that only wants the
+  line on a change). The line is the same; a usage window resetting shows at
+  the usage cache's next write instead of within a minute.
+- `vesha waybar --once` (and the `claude` wrapper) start faster: the network
+  code is loaded only when usage is actually fetched, so an answer from the
+  cache takes about 70 ms of CPU instead of 170.
 - The website, closer to Vayu's own: the tool's screenshot blurred behind the page, a centred hero with the logo and the verse, the page you're on as the white pill, glass "On this page" and footer panels, releases as cards. No glow behind the logo, no coloured line beside the verse.
 - The website has Vayu's Spatial look: graphite glass, a floating navigation bar, near-white for links and the main button, and the tool's own colour only as its signature (the logo's glow, the shloka's line, the release dots). No more all-caps labels.
 

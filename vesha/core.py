@@ -19,8 +19,6 @@ import shutil
 import threading
 import time
 import tomllib
-import urllib.error
-import urllib.request
 
 HOME = os.path.expanduser("~")
 # Accounts and profiles live in the state folder: ~/.local/share/vesha is where
@@ -582,6 +580,8 @@ def _refresh(d, cred):
         raise VeshaError("token renewing in Claude")
     if login_copied(d, oauth["refreshToken"]):   # renewing would log the other copy out
         raise VeshaError("login copied in another profile: see vesha doctor")
+    import urllib.error
+    import urllib.request
     body = json.dumps({"grant_type": "refresh_token", "refresh_token": oauth["refreshToken"], "client_id": CLIENT_ID}).encode()
     req = urllib.request.Request(TOKEN_URL, data=body, headers={"Content-Type": "application/json", "User-Agent": UA})
     try:
@@ -608,6 +608,8 @@ def fetch_usage(d):
     token = oauth.get("accessToken")
     if not token or (oauth.get("expiresAt") or 0) / 1000 < time.time() + 60:
         token = _refresh(d, cred)
+    import urllib.error   # here, not at the top: `vesha waybar --once` and the wrapper never need it
+    import urllib.request
     req = urllib.request.Request(USAGE_URL, headers={"Authorization": f"Bearer {token}", "anthropic-beta": BETA,
                                                      "User-Agent": UA, "Content-Type": "application/json"})
     try:
@@ -634,7 +636,6 @@ def usage(st, names=None, fresh=False, on_start=None, on_done=None, ttl=None):
     An account the endpoint rate-limited isn't asked again until its backoff
     ends (1, 2, 4... up to 15 minutes), even with fresh: its last numbers come
     back marked stale instead, since asking again only extends the limit."""
-    import concurrent.futures
     names = list(names or st["accounts"])
     ttl = config()["usage_ttl"] if ttl is None else ttl
     cache = _cache()
@@ -654,6 +655,7 @@ def usage(st, names=None, fresh=False, on_start=None, on_done=None, ttl=None):
             on_start(n)
         return fetch_usage(profile_dir(st, n))
     if ask:
+        import concurrent.futures   # only when something is asked: a cached answer stays cheap
         new = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
             futs = {ex.submit(one, n): n for n in ask}

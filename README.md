@@ -308,7 +308,13 @@ bind -N "Switch Claude Code account (vesha)" C display-popup -E -w 80% -h 70% ve
 **waybar**: the active account and its 5-hour usage, every account in the
 tooltip; click for the switcher, scroll to switch. `vesha waybar` keeps
 running and redraws the moment the account changes (`vesha waybar --once`
-prints one line and exits, for a bar that starts later):
+prints one line and exits, for a bar that starts later). A bar that already
+watches files can skip the running process: `vesha waybar --sources` prints
+the files whose change can change the line (the accounts, the usage cache,
+the config), and running `vesha waybar --once` when one of them changes
+gives the same line. A usage window resetting shows at the next write of the
+usage cache (the watcher writes it every few minutes) rather than within a
+minute:
 
 ```jsonc
 "custom/vesha": {

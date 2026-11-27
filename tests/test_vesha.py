@@ -331,6 +331,44 @@ class Misc(unittest.TestCase):
         self.assertTrue(core.resets_in(iso)[0].startswith("3h"))
 
 
+class WaybarOnce(unittest.TestCase):
+    """`vesha waybar --sources` names the files the line comes from, and
+    `--once` answers from the cache without loading the network code."""
+
+    def run_vesha(self, *args, code=""):
+        import json
+        import subprocess
+        home = tempfile.mkdtemp()
+        env = {"HOME": home, "PATH": os.environ.get("PATH", "/usr/bin"), "XDG_STATE_HOME": os.path.join(home, "s"),
+               "XDG_CACHE_HOME": os.path.join(home, "c"), "XDG_CONFIG_HOME": os.path.join(home, "f")}
+        os.makedirs(os.path.join(home, "s", "vesha"))
+        os.makedirs(os.path.join(home, "c", "vesha"))
+        with open(os.path.join(home, "s", "vesha", "accounts.json"), "w") as f:
+            json.dump({"default": "work", "folders": {}, "accounts": {"work": {"email": "work@example.com"},
+                                                                       "personal": {"email": "me@example.com"}}}, f)
+        now = time.time()
+        with open(os.path.join(home, "c", "vesha", "usage.json"), "w") as f:
+            json.dump({n: {"at": now, "usage": u} for n, u in use(work=(42, 10), personal=(5, 1)).items()}, f)
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script = f"import sys; sys.path.insert(0, {root!r}); from vesha.cli import main; main({list(args)!r})" + code
+        r = subprocess.run([sys.executable, "-I", "-c", script], env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return home, r.stdout.splitlines()
+
+    def test_sources(self):
+        home, out = self.run_vesha("waybar", "--sources")
+        self.assertEqual(out, [os.path.join(home, "s", "vesha", "accounts.json"),
+                               os.path.join(home, "c", "vesha", "usage.json"),
+                               os.path.join(home, "f", "vesha", "config.toml")])
+
+    def test_once_from_the_cache(self):
+        import json
+        _, out = self.run_vesha("waybar", "--once", code="; print('urllib.request' in sys.modules)")
+        line = json.loads(out[0])
+        self.assertEqual((line["text"], line["class"]), ("work 42%", "ok"))
+        self.assertEqual(out[1], "False")
+
+
 class Migrate(unittest.TestCase):
     def paths(self, root):
         new = os.path.join(root, "state", "vesha")

@@ -90,8 +90,10 @@ COMMANDS = {
                  examples=["eval \"$(vesha init zsh)\"   # in ~/.zshrc"]),
     "doctor": dict(group="Setup", aliases=["check"], args="",
                    summary="Check every account, the wrapper and the watcher", examples=["vesha doctor"]),
-    "waybar": dict(group="Setup", aliases=[], args="[--once]", summary="JSON for a waybar module (the active account and its usage)",
-                   examples=["vesha waybar", "vesha waybar --once   # one line, then exit"]),
+    "waybar": dict(group="Setup", aliases=[], args="[--once | --sources]",
+                   summary="JSON for a waybar module (the active account and its usage)",
+                   examples=["vesha waybar", "vesha waybar --once   # one line, then exit",
+                             "vesha waybar --sources   # the files to watch, for a bar that runs --once on a change"]),
     "help": dict(group="Help", aliases=[], args="[<command>]", summary="This overview, or one command in detail",
                  examples=["vesha help", "vesha help switch"]),
 }
@@ -797,7 +799,18 @@ def cmd_doctor(ctx):
 def cmd_waybar(ctx):
     """One JSON line per change: the active account and its 5-hour usage.
     Redraws on SIGRTMIN+12 (sent by `vesha switch`) and every minute.
-    --once prints the current line and exits (for a bar that starts later)."""
+    --once prints the current line and exits (for a bar that starts later).
+    --sources prints the files whose change can change the line, one per
+    line, so a bar that already watches files can run --once on a change
+    instead of keeping this running: the accounts (a switch), the usage
+    cache (the watcher, the status line and the switcher write it) and the
+    config (warn_at, switch_at). The status line's live.json isn't one: it
+    is rewritten on every reply, and the usage cache follows it when the
+    numbers change."""
+    if "--sources" in ctx.flags:
+        for path in (core.STATE, os.path.join(core.CACHE, "usage.json"), core.CONFIG):
+            print(path)
+        return 0
     import signal
     import threading
     once = "--once" in ctx.flags

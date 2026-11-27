@@ -95,7 +95,7 @@ check_every = 120    # seconds between the watcher&#x27;s checks</code></pre>
 <h2 id="integrations"><a class="anchor" href="#integrations">#</a>Integrations</h2>
 <p><strong>tmux</strong>: a popup on a key:</p>
 <pre class="code" data-lang="tmux"><code>bind -N &quot;Switch Claude Code account (vesha)&quot; C display-popup -E -w 80% -h 70% vesha</code></pre>
-<p><strong>waybar</strong>: the active account and its 5-hour usage, every account in the tooltip; click for the switcher, scroll to switch. <code>vesha waybar</code> keeps running and redraws the moment the account changes (<code>vesha waybar --once</code> prints one line and exits, for a bar that starts later):</p>
+<p><strong>waybar</strong>: the active account and its 5-hour usage, every account in the tooltip; click for the switcher, scroll to switch. <code>vesha waybar</code> keeps running and redraws the moment the account changes (<code>vesha waybar --once</code> prints one line and exits, for a bar that starts later). A bar that already watches files can skip the running process: <code>vesha waybar --sources</code> prints the files whose change can change the line (the accounts, the usage cache, the config), and running <code>vesha waybar --once</code> when one of them changes gives the same line. A usage window resetting shows at the next write of the usage cache (the watcher writes it every few minutes) rather than within a minute:</p>
 <pre class="code" data-lang="jsonc"><code>&quot;custom/vesha&quot;: {
   &quot;exec&quot;: &quot;vesha waybar&quot;,
   &quot;return-type&quot;: &quot;json&quot;,
