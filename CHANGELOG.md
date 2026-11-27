@@ -2,6 +2,10 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
+## Unreleased
+
+- `scripts/build-site.py` passes ruff again (CI failed since 2026-11-25 on an unused variable and f-string quoting that needs Python 3.12); the website it writes is byte-for-byte the same.
+
 ## v0.7.0 -- 2026-11-27
 
 - A switch no longer signals waybar itself (SIGRTMIN+12): that number can be another module's signal there (it refreshed Vayu's jyoti capsule on every switch). Only a running `vesha waybar` stream is told to redraw; a bar using `--once` follows `--sources`.
