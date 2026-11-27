@@ -494,9 +494,12 @@ def is_shim(path):
 
 
 def signal_bar():
-    """Tells waybar, and any running `vesha waybar`, to redraw now (SIGRTMIN+12).
+    """Tells any running `vesha waybar` stream to redraw now (SIGRTMIN+12).
     Only processes whose command is exactly `… vesha waybar` get it: the
-    signal's default action would end anything else."""
+    signal's default action would end anything else. waybar itself is not
+    signalled: SIGRTMIN+12 may be another module's signal there (Vayu's jyoti
+    capsule uses 12), and a bar running `vesha waybar --once` watches the
+    files `vesha waybar --sources` names instead."""
     import signal
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
@@ -507,7 +510,7 @@ def signal_bar():
         except OSError:
             continue
         mine = len(cmd) >= 2 and cmd[-1] == "waybar" and os.path.basename(cmd[-2]) == "vesha"
-        if mine or (cmd and os.path.basename(cmd[0]) == "waybar"):   # waybar handles every real-time signal
+        if mine:
             try:
                 os.kill(int(pid), signal.SIGRTMIN + 12)
             except OSError:

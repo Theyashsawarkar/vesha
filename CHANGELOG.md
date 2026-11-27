@@ -2,8 +2,9 @@
 
 Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`.
 
-## Unreleased
+## v0.7.0 -- 2026-11-27
 
+- A switch no longer signals waybar itself (SIGRTMIN+12): that number can be another module's signal there (it refreshed Vayu's jyoti capsule on every switch). Only a running `vesha waybar` stream is told to redraw; a bar using `--once` follows `--sources`.
 - `vesha waybar --sources` prints the files the bar line comes from (the
   accounts, the usage cache, the config), so a bar that already watches files
   can run `vesha waybar --once` when one changes instead of keeping
