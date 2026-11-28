@@ -4,6 +4,7 @@ Newest first. Releases are tags (`vX.Y.Z`) with `VERSION` in `vesha/__init__.py`
 
 ## Unreleased
 
+- Website: pranali joins the family list in the footer; the site builder passes ruff.
 - `scripts/build-site.py` passes ruff again (CI failed since 2026-11-25 on an unused variable and f-string quoting that needs Python 3.12); the website it writes is byte-for-byte the same.
 
 ## v0.7.0 -- 2026-11-27

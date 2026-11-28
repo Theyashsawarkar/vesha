@@ -42,6 +42,7 @@ FAMILY = [
               ("dvarapala", "द्वारपाल", "commands for AI agents, approved"), ("pramana", "प्रमाण", "password prompts"),
               ("vesha", "वेष", "Claude Code accounts"), ("vishvakarma", "विश्वकर्मा", "skills for every AI agent"),
               ("sutradhar", "सूत्रधार", "browser hands for AI agents"),
+              ("pranali", "प्रणाली", "one pipe from agents to tools"),
               ("ekatva", "एकत्व", "phone and laptop, linked"), ("vagdevi", "वाग्देवी", "book reader for Android"),
               ("varna", "वर्ण", "theme engine"), ("vinyasa", "विन्यास", "settings"),
               ("vyakarana", "व्याकरण", "key grammar")]),
